@@ -162,8 +162,9 @@ export default function CoverDesigner() {
       onPointerMove={onDragMove} onPointerUp={onDragEnd} onPointerLeave={onDragEnd}
       onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
 
-      <div className="flex-1 bg-black flex items-center justify-center p-3 md:p-6 touch-none relative">
-        <div className="h-full md:h-[92%] aspect-[1/1.414] relative">
+      {/* Preview Container: Fixed height on mobile, flex-1 on desktop */}
+      <div className="h-[38vh] md:h-full flex-shrink-0 md:flex-1 bg-black flex items-center justify-center p-3 md:p-6 touch-none relative border-b md:border-b-0 border-white/5">
+        <div className="h-full aspect-[1/1.414] relative">
           <div id="cover-print" ref={coverRef} className="w-full h-full overflow-hidden relative shadow-2xl"
             style={{backgroundColor:design.bgColor,color:design.textColor,fontFamily:`"${design.fontFamily}",sans-serif`}}
             onClick={()=>setSelected(null)}>
@@ -179,7 +180,8 @@ export default function CoverDesigner() {
             })}
           </div>
         </div>
-        <div className="md:hidden absolute top-4 left-4 flex flex-col gap-2 z-30">
+        {/* Floating actions hidden on mobile as they are now fixed in the sidebar footer */}
+        <div className="hidden md:flex absolute top-4 left-4 flex flex-col gap-2 z-30">
           <button onClick={downloadCover} className="w-11 h-11 rounded-full bg-blue-600 shadow-lg flex items-center justify-center active:scale-95 transition-transform"><Download size={18} className="text-white"/></button>
           <button onClick={()=>window.print()} className="w-11 h-11 rounded-full bg-emerald-600 shadow-lg flex items-center justify-center active:scale-95 transition-transform"><Printer size={18} className="text-white"/></button>
         </div>
@@ -213,7 +215,8 @@ export default function CoverDesigner() {
         )}
       </div>
 
-      <div className="bg-[#131317] border-t md:border-t-0 md:border-l border-white/5 flex flex-col md:w-80 lg:w-96 rounded-t-3xl md:rounded-none shadow-2xl z-10">
+      {/* Control Panel: Takes up the remaining height on mobile, fixed width on desktop */}
+      <div className="flex-1 md:flex-none h-full bg-[#131317] flex flex-col md:w-80 lg:w-96 rounded-t-3xl md:rounded-none shadow-2xl z-10 overflow-hidden">
         <input type="file" accept="image/*" ref={imgInputRef} onChange={addImage} className="hidden"/>
         <div className="flex gap-1 p-3 border-b border-white/5">
           {[{id:'elements',icon:Type,label:'عناصر'},{id:'stickers',icon:Sparkles,label:'ملصقات'},{id:'styles',icon:LayoutTemplate,label:'التصميم'},{id:'colors',icon:Palette,label:'ألوان'}].map(({id,icon:Icon,label})=>(
@@ -248,7 +251,7 @@ export default function CoverDesigner() {
                   <button
                     onClick={generateSticker}
                     disabled={isGenSticker || !aiStickerPrompt}
-                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all animate-pulse"
+                    className="px-3 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-bold rounded-xl flex items-center justify-center gap-1 active:scale-95 transition-all"
                   >
                     {isGenSticker ? <Loader2 size={12} className="animate-spin" /> : <Check size={12} />}
                   </button>
@@ -342,7 +345,8 @@ export default function CoverDesigner() {
             </div>
           )}
         </div>
-        <div className="hidden md:flex gap-3 p-4 border-t border-white/5">
+        {/* Fixed footer for both mobile and desktop */}
+        <div className="flex gap-3 p-3 md:p-4 border-t border-white/5 bg-[#131317]">
           <button onClick={downloadCover} className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-all"><Download size={15}/>تحميل</button>
           <button onClick={()=>window.print()} className="flex-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold py-3 rounded-xl flex items-center justify-center gap-2 text-sm active:scale-95 transition-all"><Printer size={15}/>طباعة</button>
         </div>
