@@ -27,6 +27,17 @@ export default function ProjectHistory() {
     convert:{ label: lang === 'ar' ? 'تحويل' : 'Convert',     c: 'amber',   icon: FileArchive },
   }
 
+  const TYPE_COLORS = {
+    emerald: { badge: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40', icon: 'text-emerald-400', thumb: 'bg-emerald-500/10', label: 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20' },
+    rose:    { badge: 'bg-rose-500/20 text-rose-300 border-rose-500/40',           icon: 'text-rose-400',    thumb: 'bg-rose-500/10',    label: 'bg-rose-500/15 text-rose-400 border border-rose-500/20'       },
+    purple:  { badge: 'bg-purple-500/20 text-purple-300 border-purple-500/40',     icon: 'text-purple-400',  thumb: 'bg-purple-500/10',  label: 'bg-purple-500/15 text-purple-400 border border-purple-500/20'   },
+    indigo:  { badge: 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40',     icon: 'text-indigo-400',  thumb: 'bg-indigo-500/10',  label: 'bg-indigo-500/15 text-indigo-400 border border-indigo-500/20'   },
+    sky:     { badge: 'bg-sky-500/20 text-sky-300 border-sky-500/40',               icon: 'text-sky-400',     thumb: 'bg-sky-500/10',     label: 'bg-sky-500/15 text-sky-400 border border-sky-500/20'         },
+    orange:  { badge: 'bg-orange-500/20 text-orange-300 border-orange-500/40',     icon: 'text-orange-400',  thumb: 'bg-orange-500/10',  label: 'bg-orange-500/15 text-orange-400 border border-orange-500/20'   },
+    amber:   { badge: 'bg-amber-500/20 text-amber-300 border-amber-500/40',        icon: 'text-amber-400',   thumb: 'bg-amber-500/10',  label: 'bg-amber-500/15 text-amber-400 border border-amber-500/20'     },
+  }
+
+
   const formatDate = (iso) => {
     if (!iso) return ''
     const d = new Date(iso)
@@ -79,7 +90,7 @@ export default function ProjectHistory() {
                 key={type}
                 onClick={() => setFilter(type)}
                 className={`flex-shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border transition-all
-                  ${filter === type ? `bg-${c}-500/20 text-${c}-300 border-${c}-500/40` : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/15'}`}
+                  ${filter === type ? TYPE_COLORS[c].badge : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/15'}`}
               >
                 {label}<span className="opacity-60">{count}</span>
               </button>
@@ -106,16 +117,16 @@ export default function ProjectHistory() {
               const Icon = cfg.icon
               return (
                 <div key={item.id} className="fu flex items-center gap-3 bg-[#131317] border border-white/5 rounded-2xl p-3 hover:border-white/10 transition-colors group">
-                  <div className={`flex-shrink-0 w-12 h-14 rounded-xl overflow-hidden border border-white/5 flex items-center justify-center bg-${cfg.c}-500/10`}>
+                  <div className={`flex-shrink-0 w-12 h-14 rounded-xl overflow-hidden border border-white/5 flex items-center justify-center ${TYPE_COLORS[cfg.c].thumb}`}>
                     {item.thumb ? (
                       <img src={item.thumb} alt="" className="w-full h-full object-cover" />
                     ) : (
-                      <Icon size={18} className={`text-${cfg.c}-400`} />
+                      <Icon size={18} className={TYPE_COLORS[cfg.c].icon} />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full bg-${cfg.c}-500/15 text-${cfg.c}-400 border border-${cfg.c}-500/20`}>
+                      <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${TYPE_COLORS[cfg.c].label}`}>
                         {cfg.label}
                       </span>
                       {item.filter && item.filter !== 'raw' && (

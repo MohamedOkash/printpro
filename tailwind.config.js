@@ -1,13 +1,15 @@
 /** @type {import('tailwindcss').Config} */
 export default {
-  content: ['./index.html', './src/**/*.{js,jsx}'],
-  // safelist ensures dynamic color classes (text-emerald-400 etc.) are included
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   safelist: [
-    { pattern: /^(text|bg|border)-(emerald|purple|amber|sky|rose|indigo|teal|violet|pink|orange|red|blue|slate|green)-(400|500|600|300|200|100)/ },
-    { pattern: /^(bg|border)-(emerald|purple|amber|sky|rose|indigo|teal|violet|pink|orange|red|blue)-(500)\/(10|15|20|25|30|40)/ },
+    {
+      pattern: /^(bg|text|border)-(emerald|purple|amber|sky|rose|indigo|orange|teal|violet|pink|slate|blue)-(400|500|600)(\/\d+)?$/,
+    },
+    {
+      pattern: /^(bg|text|border)-(emerald|purple|amber|sky|rose|indigo|orange|teal|violet|pink|slate|blue)-(300|400|500|600)\/(10|15|20|25|40)$/,
+    },
   ],
-  theme: {
-    extend: {},
-  },
+  theme: { extend: {} },
   plugins: [],
 }
+

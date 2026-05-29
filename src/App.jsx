@@ -14,6 +14,21 @@ const TABS = [
   { id:'history',   icon:History,        labelKey:'historyTab',  c:'sky'     },
 ]
 
+const TAB_ACTIVE_CLASSES = {
+  emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
+  purple:  'text-purple-400 bg-purple-500/10 border-purple-500/25',
+  amber:   'text-amber-400 bg-amber-500/10 border-amber-500/25',
+  sky:     'text-sky-400 bg-sky-500/10 border-sky-500/25',
+}
+
+const TAB_MOBILE_ACTIVE_TEXT = {
+  emerald: 'text-emerald-400',
+  purple:  'text-purple-400',
+  amber:   'text-amber-400',
+  sky:     'text-sky-400',
+}
+
+
 export default function App() {
   const {
     t,
@@ -62,9 +77,7 @@ export default function App() {
               key={id}
               onClick={() => setTab(id)}
               className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all border text-sm font-bold
-                ${tab === id
-                  ? `text-${c}-400 bg-${c}-500/10 border-${c}-500/25`
-                  : 'text-slate-500 border-transparent hover:bg-white/5'}`}
+                ${tab === id ? TAB_ACTIVE_CLASSES[c] : 'text-slate-500 border-transparent hover:bg-white/5'}`}
             >
               <Icon size={17} /><span>{t(labelKey)}</span>
             </button>
@@ -146,7 +159,7 @@ export default function App() {
               key={id}
               onClick={() => setTab(id)}
               className={`flex-1 flex flex-col items-center justify-center gap-1 py-2.5 transition-all
-                ${tab === id ? `text-${c}-400` : 'text-slate-600'}`}
+                ${tab === id ? TAB_MOBILE_ACTIVE_TEXT[c] : 'text-slate-600'}`}
             >
               <Icon size={18} />
               <span className="text-[9px] font-bold">{t(labelKey)}</span>
