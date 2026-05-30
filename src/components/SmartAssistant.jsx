@@ -13,9 +13,22 @@ export default function SmartAssistant({ onNavigate }) {
 
   const fileInputRef = useRef(null)
 
+  // [تم الإصلاح]: دالة للتحقق من دعم نوع الملف لتجنب انهيار التطبيق
+  const isValidFile = (f) => {
+    if (!f) return false;
+    const validExtensions = ['.pdf', '.docx', '.xlsx', '.xls', '.png', '.jpg', '.jpeg', '.webp'];
+    return validExtensions.some(ext => f.name.toLowerCase().endsWith(ext));
+  };
+
   const handleFileChange = (e) => {
     const f = e.target.files[0]
-    if (f) setFile(f)
+    if (f) {
+      if (!isValidFile(f)) {
+        alert(lang === 'ar' ? 'نوع الملف غير مدعوم!' : 'Unsupported file type!');
+        return;
+      }
+      setFile(f)
+    }
   }
 
   const handleDragOver = (e) => {
@@ -31,7 +44,14 @@ export default function SmartAssistant({ onNavigate }) {
     e.preventDefault()
     setIsDragOver(false)
     const f = e.dataTransfer.files[0]
-    if (f) setFile(f)
+    if (f) {
+      // [تم الإصلاح]: منع تمرير الملفات غير المدعومة عبر السحب والإفلات
+      if (!isValidFile(f)) {
+        alert(lang === 'ar' ? 'نوع الملف غير مدعوم!' : 'Unsupported file type!');
+        return;
+      }
+      setFile(f)
+    }
   }
 
   const handleSuggestion = (suggestion) => {
@@ -131,7 +151,6 @@ Respond STRICTLY in JSON format with no other text:
 }`
 
       let classification = null
-      // We check if API key is present, otherwise fallback offline directly to save latency
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY
       if (apiKey) {
         classification = await callClaudeAPI(prompt)
@@ -141,7 +160,6 @@ Respond STRICTLY in JSON format with no other text:
         classification = classifyRequestOffline(fileName, requestText)
       }
 
-      // If English language is active, generate English explanation if the AI returned Arabic
       if (lang === 'en' && classification.explanation) {
         if (/[\u0600-\u06FF]/.test(classification.explanation)) {
           if (classification.tab === 'cleaner') {
@@ -156,13 +174,11 @@ Respond STRICTLY in JSON format with no other text:
 
       setAiResponse(classification)
 
-      // Simulate a small delay for premium UX transition
       setTimeout(() => {
         if (file) {
           setSharedFiles([file])
         }
         onNavigate(classification.tab)
-        // Reset state
         setFile(null)
         setRequestText('')
         setAiResponse(null)

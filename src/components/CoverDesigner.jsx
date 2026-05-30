@@ -24,7 +24,6 @@ const getBackgroundPrompt = (subject) => {
     { keys: ['إنجليزي', 'english'], prompt: 'London Big Ben tower, red telephone booth, cute educational English doodles, flat vector style, bright modern background, high resolution, A4 format, no text' },
     { keys: ['فرنسي', 'french'], prompt: 'Paris Eiffel tower illustration, French flag colors, flat vector educational art style, clean bright layout, high resolution, A4 format, no text' },
   ];
-
   let prompt = 'Cute school doodles, open books, pencils, school supplies pattern, colorful vector art, educational background, clean graphic illustration, high resolution, A4 format, no text';
   for (const item of map) {
     if (item.keys.some(k => sLower.includes(k) || k.includes(sLower))) {
@@ -43,7 +42,10 @@ export default function CoverDesigner() {
       const file = sharedFiles[0];
       if (file.type.startsWith('image/')) {
         const src = URL.createObjectURL(file);
-        setDesign(p => ({ ...p, bgImage: src }));
+        setDesign(p => {
+          if (p.bgImage && p.bgImage.startsWith('blob:')) URL.revokeObjectURL(p.bgImage);
+          return { ...p, bgImage: src };
+        });
       }
       setSharedFiles([]);
     }
@@ -135,6 +137,17 @@ export default function CoverDesigner() {
     }))
   }, [lang])
 
+  // Cleanup Object URLs on unmount
+  useEffect(() => {
+    return () => {
+      elements.forEach(el => {
+        if (el.type === 'image' && el.src && el.src.startsWith('blob:')) {
+          URL.revokeObjectURL(el.src);
+        }
+      });
+    };
+  }, []);
+
   const addText = () => {
     const id = `t-${Date.now()}`
     setElements(p => [...p, { id, type: 'text', text: lang === 'ar' ? 'نص جديد' : 'New Text', size: 28, rotation: 0, x: 50, y: 50, opacity: 100, zIndex: 12 }])
@@ -161,11 +174,22 @@ export default function CoverDesigner() {
   }
 
   const updateEl = (id, k, v) => setElements(p => p.map(e => e.id === id ? { ...e, [k]: v } : e))
+  
   const removeEl = id => {
+    const elToRemove = elements.find(e => e.id === id);
+    if (elToRemove && elToRemove.type === 'image' && elToRemove.src && elToRemove.src.startsWith('blob:')) {
+      URL.revokeObjectURL(elToRemove.src);
+    }
+    
+    // Cleanup refs to avoid memory leak
+    if (elRefs.current[id]) delete elRefs.current[id];
+    if (posRefs.current[id]) delete posRefs.current[id];
+
     setElements(p => p.filter(e => e.id !== id))
     if (selected === id) setSelected(null)
     if (editingTextId === id) setEditingTextId(null)
   }
+
   const changeZ = (id, d) => setElements(p => p.map(e => e.id === id ? { ...e, zIndex: Math.max(0, Math.min(50, e.zIndex + d)) } : e))
 
   const onDragStart = id => e => {
@@ -207,11 +231,13 @@ export default function CoverDesigner() {
   }
 
   const handleAI = async () => {
-    if (!aiForm.subject) return; setIsAI(true)
+    if (!aiForm.subject) return;
+    setIsAI(true)
     try {
       const prompt = lang === 'ar'
         ? `أنت مصمم أغلفة مذكرات تعليمية. المادة: ${aiForm.subject}, الصف: ${aiForm.grade || 'غير محدد'}, المعلم: ${aiForm.teacher || 'غير محدد'}. أعد JSON فقط بلا أي نص إضافي: {"title":"عنوان جذاب","subtitle":"تفاصيل الصف","author":"إعداد المعلم: [الاسم]"}`
         : `You are an educational book cover designer. Subject: ${aiForm.subject}, Grade: ${aiForm.grade || 'unspecified'}, Teacher: ${aiForm.teacher || 'unspecified'}. Return JSON only with no other text: {"title":"Attractive Title","subtitle":"Grade Details","author":"Prepared by Teacher: [Name]"}`;
+      
       const r = await callClaudeAPI(prompt)
       if (r) {
         setElements(p => p.map(e => {
@@ -229,8 +255,12 @@ export default function CoverDesigner() {
         // Preload image
         await new Promise((resolve) => {
           const img = new Image()
+          img.crossOrigin = 'anonymous' // [إصلاح CORS] للسماح للمتصفح برسم الصورة بدون خطأ التصدير
           img.onload = () => {
-            setDesign(p => ({ ...p, bgImage: bgUrl, textColor: '#ffffff' }))
+            setDesign(p => {
+              if (p.bgImage && p.bgImage.startsWith('blob:')) URL.revokeObjectURL(p.bgImage);
+              return { ...p, bgImage: bgUrl, textColor: '#ffffff' };
+            })
             resolve()
           }
           img.onerror = () => resolve()
@@ -255,6 +285,7 @@ export default function CoverDesigner() {
       // Preload image
       await new Promise((resolve) => {
         const img = new Image()
+        img.crossOrigin = 'anonymous' // السطر المطلوب لحل مشكلة التصدير للملصقات
         img.onload = () => {
           const id = `ai-sticker-${Date.now()}`
           setElements(p => [
@@ -279,7 +310,8 @@ export default function CoverDesigner() {
   const downloadCover = async () => {
     const h2c = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas')
     h2c(coverRef.current, { scale: 3, useCORS: true, backgroundColor: design.bgColor }).then(c => {
-      const a = document.createElement('a'); a.download = 'PrintPro_Cover.png'; a.href = c.toDataURL('image/png'); a.click()
+      const a = document.createElement('a');
+      a.download = 'PrintPro_Cover.png'; a.href = c.toDataURL('image/png'); a.click()
       const mainTitleEl = elements.find(e => e.id === 't1' || e.id === 'title')
       const designName = mainTitleEl ? mainTitleEl.text : (lang === 'ar' ? 'غلاف مذكرة' : 'Cover Design')
       addHistoryItem({
@@ -291,7 +323,7 @@ export default function CoverDesigner() {
           elements
         }
       })
-    })
+    }).catch(err => console.error("Canvas Export Error:", err))
   }
 
   const COLOR_TEXT = {
@@ -308,7 +340,7 @@ export default function CoverDesigner() {
         <button
           onClick={() => setActiveSection(active ? '' : id)}
           className={`w-full flex items-center justify-between p-4 font-bold transition-colors text-sm
-            ${active ? `${COLOR_TEXT[color]} bg-white/[0.01]` : 'text-slate-400 hover:text-white hover:bg-white/[0.01]'}`}
+          ${active ? `${COLOR_TEXT[color]} bg-white/[0.01]` : 'text-slate-400 hover:text-white hover:bg-white/[0.01]'}`}
         >
           <span className="flex items-center gap-2.5">
             <Icon size={16} />
@@ -336,8 +368,9 @@ export default function CoverDesigner() {
           <div id="cover-print" ref={coverRef} className="w-full h-full overflow-hidden relative shadow-2xl"
             style={{ backgroundColor: design.bgColor, color: design.textColor, fontFamily: `"${design.fontFamily}",sans-serif` }}
             onClick={() => setSelected(null)}>
+            
             {design.bgImage && (
-              <img src={design.bgImage} alt="" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
+              <img src={design.bgImage} alt="" crossOrigin="anonymous" className="absolute inset-0 w-full h-full object-cover pointer-events-none" />
             )}
             <CoverFrame borderColor={design.borderColor} frameStyle={design.frameStyle} />
             {[...elements].sort((a, b) => a.zIndex - b.zIndex).map(el => {
@@ -362,6 +395,7 @@ export default function CoverDesigner() {
                     src={el.src}
                     alt=""
                     draggable={false}
+                    crossOrigin="anonymous"
                     onPointerDown={onDragStart(el.id)}
                     className={isSel ? 'outline outline-2 outline-indigo-400' : ''}
                     style={{ ...base, width: `${el.size}%` }}
@@ -470,14 +504,14 @@ export default function CoverDesigner() {
                             {lang === 'ar' ? 'محتوى النص:' : 'Text Content:'}
                           </label>
                          <textarea
-  key={`input-${el.id}`}
-  value={el.text}
-  onChange={e => updateEl(el.id, 'text', e.target.value)}
-  onFocus={e => e.target.select()}
-  dir="auto"
-  rows={2}
-  className="w-full bg-black/40 border border-white/10 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs font-bold text-white outline-none transition-colors resize-none"
-/>
+                          key={`input-${el.id}`}
+                          value={el.text}
+                          onChange={e => updateEl(el.id, 'text', e.target.value)}
+                          onFocus={e => e.target.select()}
+                          dir="auto"
+                          rows={2}
+                          className="w-full bg-black/40 border border-white/10 focus:border-indigo-500 rounded-xl px-3 py-2.5 text-xs font-bold text-white outline-none transition-colors resize-none"
+                        />
                         </div>
                       )}
                       
@@ -607,7 +641,7 @@ export default function CoverDesigner() {
                           key={f}
                           onClick={() => setDesign(p => ({ ...p, fontFamily: f }))}
                           className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
-                            design.fontFamily === f
+                             design.fontFamily === f
                               ? 'bg-indigo-600 text-white border-indigo-600'
                               : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/20'
                           }`}
@@ -627,21 +661,21 @@ export default function CoverDesigner() {
                           key={fr.id}
                           onClick={() => setDesign(p => ({ ...p, frameStyle: fr.id }))}
                           className={`py-2.5 px-3 rounded-xl text-xs font-bold transition-all border text-center ${
-                            design.frameStyle === fr.id
+                             design.frameStyle === fr.id
                               ? 'bg-indigo-500/20 text-indigo-300 border-indigo-500/40'
                               : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/15'
                           }`}
-                        >
+                         >
                           {lang === 'ar' ? fr.name : fr.nameEn}
                         </button>
-                      ))}
+                       ))}
                     </div>
                   </div>
                 </div>
               </AccordionSection>
 
               {/* Section 3: Colors & Backdrops */}
-              <AccordionSection
+               <AccordionSection
                 id="colors"
                 label={lang === 'ar' ? 'الألوان وخلفيات التصميم' : 'Colors & Backdrops'}
                 icon={Palette}
@@ -662,7 +696,10 @@ export default function CoverDesigner() {
                       <div className="flex items-center justify-between">
                         <span className="text-xs font-bold text-indigo-400">{lang === 'ar' ? 'صورة الخلفية التوليدية' : 'Generative Background'}</span>
                         <button
-                          onClick={() => setDesign(p => ({ ...p, bgImage: '' }))}
+                          onClick={() => setDesign(p => {
+                            if (p.bgImage && p.bgImage.startsWith('blob:')) URL.revokeObjectURL(p.bgImage);
+                            return { ...p, bgImage: '' };
+                          })}
                           className="text-[10px] text-red-400 hover:text-red-300 font-bold flex items-center gap-1"
                         >
                           <Trash2 size={11} /> {lang === 'ar' ? 'إزالة الخلفية' : 'Remove Backdrop'}
@@ -674,7 +711,7 @@ export default function CoverDesigner() {
                         className="w-full h-24 object-cover rounded-xl border border-white/10"
                       />
                     </div>
-                  )}
+                   )}
                 </div>
               </AccordionSection>
 
@@ -694,7 +731,7 @@ export default function CoverDesigner() {
                       className="text-xl p-2 bg-white/5 hover:bg-white/15 border border-white/5 rounded-xl active:scale-90 transition-all text-center"
                     >
                       {s}
-                    </button>
+                     </button>
                   ))}
                 </div>
               </AccordionSection>

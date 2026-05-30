@@ -270,7 +270,20 @@ export default function AppProvider({ children, lang, setLang }) {
       try {
         localStorage.setItem(HIST_KEY, JSON.stringify(updated))
       } catch (e) {
-        console.error("Error saving history to localStorage:", e)
+        // [إصلاح الثغرة]: معالجة انهيار التطبيق عند امتلاء الذاكرة المؤقتة للزوار
+        if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
+          console.warn("Storage quota exceeded. Reducing history size to prevent crash.");
+          // الاحتفاظ بآخر 5 مشاريع فقط لتوفير المساحة
+          const reduced = updated.slice(0, 5);
+          setHistory(reduced);
+          try {
+            localStorage.setItem(HIST_KEY, JSON.stringify(reduced));
+          } catch (err) {
+            console.error("Still exceeding storage quota after reduction:", err);
+          }
+        } else {
+          console.error("Error saving history to localStorage:", e);
+        }
       }
     }
   }

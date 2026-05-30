@@ -109,7 +109,10 @@ export const callClaudeAPI = async (prompt) => {
 
     const data = await res.json()
     const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || ''
-    return JSON.parse(text.trim())
+    
+    // [تم الإصلاح]: إزالة علامات Markdown العشوائية لضمان نجاح التحويل
+    const cleanedText = text.replace(/```json/gi, '').replace(/```/g, '').trim()
+    return JSON.parse(cleanedText)
 
   } catch (err) {
     console.warn('Gemini API call failed, using offline fallback:', err)

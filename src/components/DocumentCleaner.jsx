@@ -4,24 +4,62 @@ import {
   Scissors, RotateCw, Sliders, Stamp, ScanText, Plus,
   Sun, Contrast, Palette, X, Check, Copy, Loader2,
   Camera, CheckCircle2, ChevronDown, ChevronUp, Eye,
-  Undo2, Redo2, Share2 // تمت إضافة الأيقونات الجديدة هنا
+  Undo2, Redo2, Share2
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { FILTER_PRESETS } from '../constants'
 import { applySharpen, applyAdaptive, applyShadowRemoval, getAverageBrightness, applyColorAdjustments } from '../utils/imageProcessing'
 import { loadScript, CDN } from '../utils/scriptLoader'
 
-const dataURLtoBlob = (dataurl) => {
-  const arr = dataurl.split(',');
-  const mime = arr[0].match(/:(.*?);/)[1];
-  const bstr = atob(arr[1]);
-  let n = bstr.length;
-  const u8arr = new Uint8Array(n);
-  while (n--) {
-    u8arr[n] = bstr.charCodeAt(n);
-  }
-  return new Blob([u8arr], { type: mime });
-}
+// [تم الإصلاح]: طريقة حديثة وسريعة للتحويل لمنع تجميد المتصفح
+const dataURLtoBlob = async (dataurl) => {
+  const response = await fetch(dataurl);
+  return await response.blob();
+};
+
+// [تم الإصلاح]: مكون ذكي لمنع التهنيج (60FPS Smoothness) أثناء سحب شريط التعديل
+const OptimizedSlider = ({ icon: Icon, label, val, setVal, min, max, c, type, canvasRef, currentFilters }) => {
+  const [localVal, setLocalVal] = useState(val);
+  
+  useEffect(() => {
+    setLocalVal(val);
+  }, [val]);
+
+  const handleDrag = (e) => {
+    const v = Number(e.target.value);
+    setLocalVal(v); 
+    
+    // تطبيق الفلتر فورياً عبر DOM لمنع Re-render للصفحة بأكملها
+    if (canvasRef.current && currentFilters) {
+      const filters = currentFilters();
+      filters[type] = v;
+      canvasRef.current.style.filter = `invert(${filters.invert ? 100 : 0}%) brightness(${filters.brightness}%) contrast(${filters.contrast}%) grayscale(${filters.grayscale}%)`;
+    }
+  };
+
+  const handleCommit = () => {
+    setVal(localVal);
+  };
+
+  return (
+    <div className="space-y-1.5">
+      <div className="flex justify-between text-[11px] font-bold">
+        <span className={`flex items-center gap-1.5 ${c}`}><Icon size={12}/>{label}</span>
+        <span className="text-slate-500">{localVal}%</span>
+      </div>
+      <input 
+        type="range" 
+        min={min} 
+        max={max} 
+        value={localVal} 
+        onChange={handleDrag} 
+        onPointerUp={handleCommit}
+        onTouchEnd={handleCommit}
+        className="w-full h-1.5 accent-indigo-500 cursor-pointer"
+      />
+    </div>
+  );
+};
 
 export default function DocumentCleaner() {
   const { t, lang, addHistoryItem, sharedFiles, setSharedFiles, activeEditCleaner, setActiveEditCleaner } = useApp()
@@ -52,10 +90,13 @@ export default function DocumentCleaner() {
   const [isOcr,   setIsOcr]           = useState(false);
   const [isCopied, setIsCopied]       = useState(false);
   const [showCamera, setShowCamera]   = useState(false);
-  
+
+  // دالة قراءة الفلاتر للمكون السريع
+  const getCurrentFilters = () => ({ brightness, contrast, grayscale, invert });
+
   // Accordion active section
   const [activeSection, setActiveSection] = useState('upload');
-
+  
   // Undo/Redo Refs
   const undoStackRef = useRef([])
   const redoStackRef = useRef([])
@@ -71,7 +112,6 @@ export default function DocumentCleaner() {
   const streamRef      = useRef(null);
 
   const currentSrc = pages[activePage]?.src || null;
-
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(''),2500); };
 
   // Undo/Redo Functions
@@ -124,7 +164,7 @@ export default function DocumentCleaner() {
           const img = new Image();
           img.onload = () => {
             const canvas = document.createElement('canvas');
-            const MAX_SIZE = 1000;
+            const MAX_SIZE = 300; // [تم الإصلاح]: تقليل الحجم لعدم استهلاك الذاكرة المحلية
             let w = img.naturalWidth;
             let h = img.naturalHeight;
             if (w > MAX_SIZE || h > MAX_SIZE) {
@@ -175,7 +215,7 @@ export default function DocumentCleaner() {
           for (let i = 1; i <= pdfDoc.numPages; i++) {
             showToast(lang === 'ar' ? `جاري معالجة الصفحة ${i} من ${pdfDoc.numPages}...` : `Processing page ${i} of ${pdfDoc.numPages}...`);
             const page = await pdfDoc.getPage(i);
-            const vp = page.getViewport({ scale: 3.0 });
+            const vp = page.getViewport({ scale: 2.0 }); // تقليل الدقة لتسريع التحميل ومنع انهيار الرامات
             const c = document.createElement('canvas');
             c.width = vp.width;
             c.height = vp.height;
@@ -234,30 +274,37 @@ export default function DocumentCleaner() {
     }
   }, [sharedFiles, setSharedFiles]);
 
+  // [تم الإصلاح]: معالجة استيراد History بشكل Async وتنظيف الروابط القديمة لمنع تسريب الذاكرة
   useEffect(() => {
     if (activeEditCleaner) {
-      setIsBusy(true);
-      try {
-        const loadedPages = activeEditCleaner.pages.map(p => {
-          const blob = dataURLtoBlob(p.base64);
-          return {
-            id: Date.now() + Math.random(),
-            src: URL.createObjectURL(blob),
-            name: p.name
-          };
-        });
-        setPages(loadedPages);
-        setActivePage(0);
-        applyPreset(FILTER_PRESETS[0]);
-        setPanel('main');
-        setShowBA(false);
-        setActiveSection('crop');
-      } catch (err) {
-        console.error("Error loading project from history:", err);
-      } finally {
-        setIsBusy(false);
-        setActiveEditCleaner(null);
-      }
+      const loadProject = async () => {
+        setIsBusy(true);
+        try {
+          pagesRef.current.forEach(p => {
+            if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
+          });
+          const loadedPages = await Promise.all(activeEditCleaner.pages.map(async p => {
+            const blob = await dataURLtoBlob(p.base64);
+            return {
+              id: Date.now() + Math.random(),
+              src: URL.createObjectURL(blob),
+              name: p.name
+            };
+          }));
+          setPages(loadedPages);
+          setActivePage(0);
+          applyPreset(FILTER_PRESETS[0]);
+          setPanel('main');
+          setShowBA(false);
+          setActiveSection('crop');
+        } catch (err) {
+          console.error("Error loading project from history:", err);
+        } finally {
+          setIsBusy(false);
+          setActiveEditCleaner(null);
+        }
+      };
+      loadProject();
     }
   }, [activeEditCleaner, setActiveEditCleaner]);
 
@@ -414,6 +461,9 @@ export default function DocumentCleaner() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext('2d', { willReadFrequently: true });
+    // تفريغ الفلاتر المحلية المطبقة اثناء السحب
+    canvas.style.filter = 'none'; 
+    
     const img = new Image();
     img.onload = () => {
       const MAX = 2200;
@@ -429,8 +479,7 @@ export default function DocumentCleaner() {
       if (hdSharpen) applySharpen(ctx, w, h);
     };
     img.src = currentSrc;
-  }, [currentSrc, panel, brightness, contrast, grayscale, invert,
-      adaptThresh, hdSharpen, shadowFix]);
+  }, [currentSrc, panel, brightness, contrast, grayscale, invert, adaptThresh, hdSharpen, shadowFix]);
 
   // ── Original for Before/After ─────────────────────────────────────────────
   useEffect(() => {
@@ -445,12 +494,12 @@ export default function DocumentCleaner() {
     img.src = currentSrc;
   }, [showBA, currentSrc]);
 
-  // Safety net to release ALL remaining blob URLs on component unmount
+  // [تم الإصلاح]: تنظيف الذاكرة والكاميرا عند الخروج من المكون
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
-
   useEffect(() => {
     return () => {
+      if (streamRef.current) streamRef.current.getTracks().forEach(t => t.stop());
       pagesRef.current.forEach(p => {
         if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
       });
@@ -512,6 +561,20 @@ export default function DocumentCleaner() {
     img.src=currentSrc;
   };
 
+  // [تم الإصلاح]: ميزة المسح الضوئي الذكي لكامل المستند
+  const applySmartScanAll = () => {
+    if (!pages.length) return;
+    setIsBusy(true);
+    setBrightness(160);
+    setContrast(220);
+    setGrayscale(100);
+    setHdSharpen(true);
+    setAdaptThresh(true);
+    setActiveFilter('custom');
+    showToast(lang === 'ar' ? 'تم تطبيق المسح الضوئي الذكي على كامل الملف! ✓' : 'Smart Scan applied to all pages! ✓');
+    setIsBusy(false);
+  };
+
   // ── Smart Border Detection ────────────────────────────────────────────────
   const detectSmartCrop = () => {
     if (!currentSrc) return;
@@ -528,8 +591,6 @@ export default function DocumentCleaner() {
       ctx.drawImage(img, 0, 0, w, h);
       const imgData = ctx.getImageData(0, 0, w, h);
       const data = imgData.data;
-
-      // Convert to grayscale edge map using Sobel operator
       const gray = new Float32Array(w * h);
       for (let i = 0; i < w * h; i++) {
         const o = i * 4;
@@ -583,12 +644,10 @@ export default function DocumentCleaner() {
       const y1 = Math.max(0, minY - padY);
       const x2 = Math.min(w, maxX + padX);
       const y2 = Math.min(h, maxY + padY);
-
       const xPct = Math.round((x1 / w) * 100);
       const yPct = Math.round((y1 / h) * 100);
       const wPct = Math.max(20, Math.round(((x2 - x1) / w) * 100));
       const hPct = Math.max(20, Math.round(((y2 - y1) / h) * 100));
-
       setCropBox({
         x: Math.max(0, Math.min(80, xPct)),
         y: Math.max(0, Math.min(80, yPct)),
@@ -1054,7 +1113,6 @@ export default function DocumentCleaner() {
                     {isBusy?<Loader2 size={12} className="animate-spin"/>:<ImageIcon size={12}/>}{lang==='ar'?'حفظ كصورة':'Save Image'}
                   </button>
 
-                  {/* زر المشاركة الجديد تمت إضافته هنا */}
                   {navigator.share && (
                     <button
                       onClick={() => {
@@ -1062,7 +1120,7 @@ export default function DocumentCleaner() {
                         canvasRef.current.toBlob(blob => {
                           shareFile(blob, 'PrintPro_doc.jpg')
                         }, 'image/jpeg', 1.0)
-                      }}
+                       }}
                       className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors"
                     >
                       <Share2 size={12} />
@@ -1121,31 +1179,30 @@ export default function DocumentCleaner() {
               <button onClick={autoEnhance} className="w-full py-2.5 bg-gradient-to-r from-amber-500 to-orange-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-amber-500/10">
                 <Wand2 size={13}/>{t('autoEnhance')}
               </button>
+              
+              {/* [تم الإصلاح]: زر المسح الضوئي لكامل المستند */}
+              <button onClick={applySmartScanAll} className="w-full py-2.5 bg-gradient-to-r from-teal-500 to-emerald-500 text-white font-black rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-lg mt-2">
+                <ScanText size={13}/>{lang === 'ar' ? 'مسح ضوئي ذكي لكامل المستند' : 'Smart Scan All Pages'}
+              </button>
 
               <div className="space-y-2 border-t border-white/5 pt-3">
-                {[
-                  {icon:Sun,     label:t('brightness'), val:brightness, set:setBrightness, min:50, max:300, c:'text-amber-400'},
-                  {icon:Contrast,label:t('contrast'),   val:contrast,   set:setContrast,   min:50, max:400, c:'text-indigo-400'},
-                  {icon:Palette, label:t('grayscale'),  val:grayscale,  set:setGrayscale,  min:0,  max:100, c:'text-slate-400'},
-                ].map(({icon:Icon,label,val,set,min,max,c})=>(
-                  <div key={label} className="space-y-1.5">
-                    <div className="flex justify-between text-[11px] font-bold">
-                      <span className={`flex items-center gap-1.5 ${c}`}><Icon size={12}/>{label}</span>
-                      <span className="text-slate-500">{val}%</span>
-                    </div>
-                    <input 
-                      type="range" 
-                      min={min} 
-                      max={max} 
-                      value={val} 
-                      onChange={e=>set(Number(e.target.value))} 
-                      onPointerDown={e => e.stopPropagation()} 
-                      onPointerMove={e => e.stopPropagation()}
-                      onPointerUp={e => e.stopPropagation()}
-                      className="w-full h-1.5 accent-indigo-500 touch-none"
-                    />
-                  </div>
-                ))}
+                <OptimizedSlider 
+                  icon={Sun} label={t('brightness')} val={brightness} setVal={setBrightness} 
+                  min={50} max={300} c="text-amber-400" type="brightness" 
+                  canvasRef={canvasRef} currentFilters={getCurrentFilters} 
+                />
+                
+                <OptimizedSlider 
+                  icon={Contrast} label={t('contrast')} val={contrast} setVal={setContrast} 
+                  min={50} max={400} c="text-indigo-400" type="contrast" 
+                  canvasRef={canvasRef} currentFilters={getCurrentFilters} 
+                />
+                
+                <OptimizedSlider 
+                  icon={Palette} label={t('grayscale')} val={grayscale} setVal={setGrayscale} 
+                  min={0} max={100} c="text-slate-400" type="grayscale" 
+                  canvasRef={canvasRef} currentFilters={getCurrentFilters} 
+                />
               </div>
 
               <div className="space-y-2 pt-2 border-t border-white/5">
@@ -1229,10 +1286,7 @@ export default function DocumentCleaner() {
                       max={100} 
                       value={wmOpacity} 
                       onChange={e=>setWmOpacity(Number(e.target.value))} 
-                      onPointerDown={e => e.stopPropagation()} 
-                      onPointerMove={e => e.stopPropagation()}
-                      onPointerUp={e => e.stopPropagation()}
-                      className="flex-1 h-1.5 accent-pink-500 touch-none"
+                      className="flex-1 h-1.5 accent-pink-500 cursor-pointer"
                     />
                     <span className="text-xs text-pink-400 font-bold w-8 text-center">{wmOpacity}%</span>
                   </div>

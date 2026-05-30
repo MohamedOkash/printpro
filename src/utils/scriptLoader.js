@@ -3,7 +3,7 @@
  * Returns a promise that resolves with the global variable the script exposes.
  *
  * Usage:
- *   const { jsPDF } = await loadScript('https://cdn.../jspdf.umd.min.js', 'jspdf')
+ * const { jsPDF } = await loadScript('https://cdn.../jspdf.umd.min.js', 'jspdf')
  */
 const cache = {}
 
@@ -16,7 +16,11 @@ export const loadScript = (src, globalVar) =>
       const s = document.createElement('script')
       s.src = src
       s.onload  = () => res(window[globalVar])
-      s.onerror = rej
+      s.onerror = (err) => {
+        // [تم الإصلاح]: مسح الكاش في حالة فشل التحميل للسماح للمستخدم بالمحاولة مجدداً
+        delete cache[src];
+        rej(err);
+      }
       document.head.appendChild(s)
     })
 

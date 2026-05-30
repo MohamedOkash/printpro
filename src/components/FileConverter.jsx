@@ -35,7 +35,6 @@ export default function FileConverter() {
   const [errorMsg, setErrorMsg] = useState('')
   const [isBusy, setIsBusy] = useState(false)
 
-
   const fileRef = useRef(null)
   const addRef = useRef(null)
 
@@ -105,7 +104,13 @@ export default function FileConverter() {
         addHistoryItem({ type: 'merge', name: lang === 'ar' ? `دمج ${files.length} ملفات` : `Merged ${files.length} files`, thumb: null })
         setState('done')
         setProgressNum(100)
+        
       } else if (mode === 'split') {
+        // [تم الإصلاح]: فحص النطاق لمنع الشاشة البيضاء والانهيار
+        if (!/^\d+(?:\s*-\s*\d+)?$/.test(splitRange.trim())) {
+          throw new Error(lang === 'ar' ? 'صيغة النطاق غير صحيحة. استخدم أرقاماً مثل 1-5 أو 3' : 'Invalid range format. Use e.g., 1-5 or 3');
+        }
+        
         setProgress(lang === 'ar' ? 'تقسيم PDF…' : 'Splitting PDF…')
         setProgressNum(30)
         const { PDFDocument } = await loadScript(CDN.pdfLib || 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'PDFLib')
@@ -122,12 +127,22 @@ export default function FileConverter() {
         addHistoryItem({ type: 'split', name: lang === 'ar' ? `صفحات ${start + 1}-${end + 1}` : `Pages ${start + 1}-${end + 1}`, thumb: null })
         setState('done')
         setProgressNum(100)
+        
       } else if (mode === 'edit') {
-        setProgress(lang === 'ar' ? 'تحميل مكتبة PDF-lib…' : 'Loading PDF-lib…')
+        setProgress(lang === 'ar' ? 'تحميل مكتبة PDF-lib والخطوط…' : 'Loading PDF-lib & Fonts…')
         setProgressNum(20)
-        const { PDFDocument, rgb, StandardFonts } = await loadScript(CDN.pdfLib || 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'PDFLib')
+        
+        const { PDFDocument, rgb } = await loadScript(CDN.pdfLib || 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'PDFLib')
+        
+        // [تم الإصلاح]: جلب الخط العربي لكي لا تظهر النصوص كمربعات
+        await loadScript('https://unpkg.com/@pdf-lib/fontkit@0.0.4/dist/fontkit.umd.js', 'fontkit')
         const pdf = await PDFDocument.load(await files[0].arrayBuffer())
-        const font = await pdf.embedFont(StandardFonts.HelveticaBold)
+        pdf.registerFontkit(window.fontkit)
+        
+        const fontUrl = 'https://fonts.gstatic.com/s/cairo/v28/SLXVc1nY6HkvangtZmpcWmhz.ttf';
+        const fontBytes = await fetch(fontUrl).then(res => res.arrayBuffer());
+        const font = await pdf.embedFont(fontBytes);
+        
         const pages = pdf.getPages()
         
         pages.forEach((page, idx) => {
@@ -152,7 +167,7 @@ export default function FileConverter() {
         setProgress(lang === 'ar' ? 'جاري الحفظ…' : 'Saving…')
         setProgressNum(90)
         
-        const pdfBytes = pdfEncrypt && pdfPassword
+        const pdfBytesOut = pdfEncrypt && pdfPassword
           ? await pdf.save({
               userPassword:  pdfPassword,
               ownerPassword: pdfPassword + '_owner',
@@ -168,12 +183,13 @@ export default function FileConverter() {
             })
           : await pdf.save()
 
-        const blob = new Blob([pdfBytes], { type: 'application/pdf' })
+        const blob = new Blob([pdfBytesOut], { type: 'application/pdf' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a'); a.href = url; a.download = 'PrintPro_Edited.pdf'; a.click(); URL.revokeObjectURL(url)
         addHistoryItem({ type: 'edit', name: lang === 'ar' ? 'تحرير PDF' : 'Edit PDF', thumb: null })
         setState('done')
         setProgressNum(100)
+        
       } else {
         // Convert Mode
         const file = files[0]
@@ -192,7 +208,8 @@ export default function FileConverter() {
             for (let i = 1; i <= pdfDoc.numPages; i++) {
               setProgress(lang === 'ar' ? `رسم صفحة ${i}/${pdfDoc.numPages}…` : `Rendering page ${i}/${pdfDoc.numPages}…`)
               setProgressNum(Math.round((i / pdfDoc.numPages) * 100))
-              const page = await pdfDoc.getPage(i); const vp = page.getViewport({ scale: 2.5 })
+              // [تم الإصلاح]: تقليل مقياس الدقة لمنع انهيار الرامات
+              const page = await pdfDoc.getPage(i); const vp = page.getViewport({ scale: 1.5 })
               const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
               await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
               folder.file(`page_${String(i).padStart(3, '0')}.jpg`, await new Promise(r => c.toBlob(r, 'image/jpeg', .95)))
@@ -206,6 +223,7 @@ export default function FileConverter() {
             addHistoryItem({ type: 'convert', name: lang === 'ar' ? `${file.name} ← صور` : `${file.name} ➜ Images`, thumb: null })
             setState('done')
             setProgressNum(100)
+            
           } else if (targetFmt === 'docx' || targetFmt === 'txt') {
             setProgress(lang === 'ar' ? 'تحميل مكتبة PDF.js…' : 'Loading PDF.js…')
             setProgressNum(20)
@@ -222,7 +240,6 @@ export default function FileConverter() {
               const page = await pdfDoc.getPage(i)
               const textContent = await page.getTextContent()
               
-              // Sort text items top-to-bottom, left-to-right
               const items = textContent.items.sort((a, b) => {
                 if (Math.abs(a.transform[5] - b.transform[5]) < 5) {
                   return a.transform[4] - b.transform[4]
@@ -231,10 +248,12 @@ export default function FileConverter() {
               })
               
               let lastY = null
+              let lastX = null
               let pageHtml = `<div class="page" style="page-break-after: always; padding: 20px;">`
               let lineText = ''
               let pageText = ''
               
+              // [تم الإصلاح]: إضافة المسافات بين الكلمات لعدم التصاقها
               for (const item of items) {
                 if (lastY !== null && Math.abs(item.transform[5] - lastY) > 5) {
                   if (lineText.trim()) {
@@ -242,10 +261,15 @@ export default function FileConverter() {
                     pageText += lineText + '\n'
                   }
                   lineText = ''
+                  lastX = null
+                } else if (lastX !== null && Math.abs(item.transform[4] - lastX) > 4) {
+                  lineText += ' '
                 }
                 lineText += item.str
                 lastY = item.transform[5]
+                lastX = item.transform[4] + (item.width || 0)
               }
+              
               if (lineText.trim()) {
                 pageHtml += `<p style="margin: 0 0 10px 0; font-family: Arial, sans-serif; font-size: 12pt;">${lineText}</p>`
                 pageText += lineText + '\n'
@@ -316,7 +340,7 @@ export default function FileConverter() {
           setProgress(lang === 'ar' ? 'جاري التحويل لـ PDF…' : 'Converting to PDF…')
           setProgressNum(60)
           const tempDiv = document.createElement('div')
-          tempDiv.style.width = '595px' // A4 width in pt
+          tempDiv.style.width = '595px'
           tempDiv.style.padding = '40px'
           tempDiv.style.color = '#000000'
           tempDiv.style.backgroundColor = '#ffffff'
@@ -424,8 +448,8 @@ export default function FileConverter() {
     } catch (e) {
       console.error(e)
       const msg = lang === 'ar'
-        ? 'حدث خطأ أثناء المعالجة. تأكد من صحة الملف وحجمه وحاول مرة أخرى.'
-        : 'An error occurred. Please check the file and try again.'
+        ? 'حدث خطأ أثناء المعالجة. تأكد من صحة الملف أو النطاق.'
+        : 'An error occurred. Please check the file or range.'
       setErrorMsg(msg)
       setState('idle')
       setProgressNum(0)
@@ -591,7 +615,8 @@ export default function FileConverter() {
                   <div className="space-y-3">
                     <div className="bg-black/20 border border-white/5 rounded-xl p-2.5 max-h-40 overflow-y-auto space-y-1.5 sc">
                       {files.map((f, i) => (
-                        <div key={i} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-lg px-3 py-2">
+                        // [تم الإصلاح]: حل مشكلة الـ key لمنع مسح الملف الخطأ بصرياً
+                        <div key={`${f.name}-${i}`} className="flex items-center justify-between bg-white/5 border border-white/5 rounded-lg px-3 py-2">
                           <div className="flex items-center gap-2 min-w-0">
                             <FileText size={14} className="text-slate-400 flex-shrink-0" />
                             <span className="text-xs font-bold text-slate-300 truncate">{f.name}</span>
