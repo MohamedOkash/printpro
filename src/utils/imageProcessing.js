@@ -73,6 +73,41 @@ export const applyShadowRemoval = (ctx, w, h) => {
   ctx.putImageData(src, 0, 0)
 }
 
+export const applyColorAdjustments = (ctx, w, h, brightness, contrast, grayscale, invert) => {
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+  const br = brightness / 100;
+  const ct = (contrast / 100 - 1) * 128;
+  const gs = grayscale / 100;
+  const inv = invert ? 1 : 0;
+
+  for (let i = 0; i < data.length; i += 4) {
+    let r = data[i], g = data[i+1], b = data[i+2];
+
+    // Grayscale
+    if (gs > 0) {
+      const gray = 0.299*r + 0.587*g + 0.114*b;
+      r = r + (gray - r) * gs;
+      g = g + (gray - g) * gs;
+      b = b + (gray - b) * gs;
+    }
+
+    // Brightness
+    r *= br; g *= br; b *= br;
+
+    // Contrast
+    r = r + ct; g = g + ct; b = b + ct;
+
+    // Invert
+    if (inv) { r = 255 - r; g = 255 - g; b = 255 - b; }
+
+    data[i]   = Math.max(0, Math.min(255, r));
+    data[i+1] = Math.max(0, Math.min(255, g));
+    data[i+2] = Math.max(0, Math.min(255, b));
+  }
+  ctx.putImageData(imageData, 0, 0);
+};
+
 /**
  * Analyse average brightness of an image src URL.
  * Returns a number 0-255.

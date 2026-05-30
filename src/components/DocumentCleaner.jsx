@@ -8,7 +8,7 @@ import {
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { FILTER_PRESETS } from '../constants'
-import { applySharpen, applyAdaptive, applyShadowRemoval, getAverageBrightness } from '../utils/imageProcessing'
+import { applySharpen, applyAdaptive, applyShadowRemoval, getAverageBrightness, applyColorAdjustments } from '../utils/imageProcessing'
 import { loadScript, CDN } from '../utils/scriptLoader'
 
 const dataURLtoBlob = (dataurl) => {
@@ -410,21 +410,27 @@ export default function DocumentCleaner() {
 
   // ── Render canvas ─────────────────────────────────────────────────────────
   useEffect(() => {
-    if (!currentSrc || panel==='crop') return;
-    const canvas = canvasRef.current; if (!canvas) return;
-    const ctx = canvas.getContext('2d', {willReadFrequently:true});
+    if (!currentSrc || panel === 'crop') return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d', { willReadFrequently: true });
     const img = new Image();
     img.onload = () => {
-      const MAX=2200; let w=img.naturalWidth, h=img.naturalHeight;
-      if (w>MAX){const r=MAX/w;w=MAX;h=Math.round(h*r);}
-      canvas.width=w; canvas.height=h;
-      ctx.drawImage(img,0,0,w,h);
-      if (adaptThresh) applyAdaptive(ctx,w,h);
-      if (shadowFix) applyShadowRemoval(ctx,w,h);
-      if (hdSharpen) applySharpen(ctx,w,h);
+      const MAX = 2200;
+      let w = img.naturalWidth, h = img.naturalHeight;
+      if (w > MAX) { const r = MAX / w; w = MAX; h = Math.round(h * r); }
+      canvas.width = w;
+      canvas.height = h;
+      ctx.drawImage(img, 0, 0, w, h);
+      // Apply all pixel-level adjustments
+      applyColorAdjustments(ctx, w, h, brightness, contrast, grayscale, invert);
+      if (adaptThresh) applyAdaptive(ctx, w, h);
+      if (shadowFix) applyShadowRemoval(ctx, w, h);
+      if (hdSharpen) applySharpen(ctx, w, h);
     };
     img.src = currentSrc;
-  }, [currentSrc,panel,adaptThresh,hdSharpen,shadowFix]);
+  }, [currentSrc, panel, brightness, contrast, grayscale, invert,
+      adaptThresh, hdSharpen, shadowFix]);
 
   // ── Original for Before/After ─────────────────────────────────────────────
   useEffect(() => {
@@ -512,32 +518,56 @@ export default function DocumentCleaner() {
     setIsBusy(true);
     const img = new Image();
     img.onload = () => {
-      const MAX_W = 500;
+      const MAX_W = 600;
       const r = Math.min(1, MAX_W / img.naturalWidth);
       const w = Math.round(img.naturalWidth * r);
       const h = Math.round(img.naturalHeight * r);
       const tc = document.createElement('canvas');
-      tc.width = w;
-      tc.height = h;
+      tc.width = w; tc.height = h;
       const ctx = tc.getContext('2d', { willReadFrequently: true });
       ctx.drawImage(img, 0, 0, w, h);
-
       const imgData = ctx.getImageData(0, 0, w, h);
       const data = imgData.data;
 
-      let totalBrightness = 0;
-      for (let i = 0; i < data.length; i += 4) {
-        totalBrightness += 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+      // Convert to grayscale edge map using Sobel operator
+      const gray = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) {
+        const o = i * 4;
+        gray[i] = 0.299 * data[o] + 0.587 * data[o+1] + 0.114 * data[o+2];
       }
-      const avgBrightness = totalBrightness / (w * h);
-      const threshold = Math.max(60, Math.min(200, avgBrightness + 25));
 
+      // Sobel edge detection
+      const edges = new Float32Array(w * h);
+      let maxEdge = 0;
+      for (let y = 1; y < h - 1; y++) {
+        for (let x = 1; x < w - 1; x++) {
+          const gx =
+            -gray[(y-1)*w+(x-1)] + gray[(y-1)*w+(x+1)]
+            -2*gray[y*w+(x-1)]   + 2*gray[y*w+(x+1)]
+            -gray[(y+1)*w+(x-1)] + gray[(y+1)*w+(x+1)];
+          const gy =
+            -gray[(y-1)*w+(x-1)] - 2*gray[(y-1)*w+x] - gray[(y-1)*w+(x+1)]
+            +gray[(y+1)*w+(x-1)] + 2*gray[(y+1)*w+x] + gray[(y+1)*w+(x+1)];
+          const mag = Math.sqrt(gx*gx + gy*gy);
+          edges[y*w+x] = mag;
+          if (mag > maxEdge) maxEdge = mag;
+        }
+      }
+
+      if (maxEdge < 10) {
+        setCropBox({ x: 5, y: 5, w: 90, h: 90 });
+        showToast(lang === 'ar' ? 'لم يتم كشف حواف واضحة' : 'No clear edges detected');
+        setPanel('crop');
+        setIsBusy(false);
+        return;
+      }
+
+      // Find bounding box of strong edges
+      const threshold = maxEdge * 0.15;
       let minX = w, maxX = 0, minY = h, maxY = 0;
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
-          const idx = (y * w + x) * 4;
-          const br = 0.299 * data[idx] + 0.587 * data[idx + 1] + 0.114 * data[idx + 2];
-          if (br > threshold) {
+          if (edges[y*w+x] > threshold) {
             if (x < minX) minX = x;
             if (x > maxX) maxX = x;
             if (y < minY) minY = y;
@@ -546,25 +576,26 @@ export default function DocumentCleaner() {
         }
       }
 
-      if (maxX - minX < w * 0.15 || maxY - minY < h * 0.15) {
-        setCropBox({ x: 10, y: 10, w: 80, h: 80 });
-        showToast(lang === 'ar' ? 'لم يتم كشف حواف واضحة، تم تعيين الافتراضي' : 'No clear borders detected, using default');
-      } else {
-        const padX = Math.round(w * 0.02);
-        const padY = Math.round(h * 0.02);
+      // Add padding
+      const padX = Math.round(w * 0.015);
+      const padY = Math.round(h * 0.015);
+      const x1 = Math.max(0, minX - padX);
+      const y1 = Math.max(0, minY - padY);
+      const x2 = Math.min(w, maxX + padX);
+      const y2 = Math.min(h, maxY + padY);
 
-        const x1 = Math.max(0, minX - padX);
-        const y1 = Math.max(0, minY - padY);
-        const x2 = Math.min(w, maxX + padX);
-        const y2 = Math.min(h, maxY + padY);
-        const xPct = Math.max(0, Math.min(100, Math.round((x1 / w) * 100)));
-        const yPct = Math.max(0, Math.min(100, Math.round((y1 / h) * 100)));
-        const wPct = Math.max(10, Math.min(100 - xPct, Math.round(((x2 - x1) / w) * 100)));
-        const hPct = Math.max(10, Math.min(100 - yPct, Math.round(((y2 - y1) / h) * 100)));
-        setCropBox({ x: xPct, y: yPct, w: wPct, h: hPct });
-        showToast(lang === 'ar' ? 'تم تحديد حواف المستند تلقائياً! ✓' : 'Document borders detected! ✓');
-      }
-      
+      const xPct = Math.round((x1 / w) * 100);
+      const yPct = Math.round((y1 / h) * 100);
+      const wPct = Math.max(20, Math.round(((x2 - x1) / w) * 100));
+      const hPct = Math.max(20, Math.round(((y2 - y1) / h) * 100));
+
+      setCropBox({
+        x: Math.max(0, Math.min(80, xPct)),
+        y: Math.max(0, Math.min(80, yPct)),
+        w: Math.min(100 - xPct, wPct),
+        h: Math.min(100 - yPct, hPct),
+      });
+      showToast(lang === 'ar' ? 'تم تحديد حواف المستند! ✓' : 'Document edges detected! ✓');
       setPanel('crop');
       setShowBA(false);
       setIsBusy(false);
@@ -735,9 +766,8 @@ export default function DocumentCleaner() {
             const c=document.createElement('canvas'); c.width=w; c.height=h;
             const ctx=c.getContext('2d');
             
-            ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
             ctx.drawImage(img,0,0,w,h);
-            ctx.filter='none';
+            applyColorAdjustments(ctx, w, h, brightness, contrast, grayscale, invert);
             if(adaptThresh) applyAdaptive(ctx,w,h);
             if(shadowFix) applyShadowRemoval(ctx,w,h);
             if(hdSharpen) applySharpen(ctx,w,h);
@@ -951,9 +981,7 @@ export default function DocumentCleaner() {
               >
                 {/* Processed */}
                 <canvas ref={canvasRef} className="block max-w-full max-h-[35vh] md:max-h-[80vh] rounded-xl shadow-2xl"
-                  style={{
-                    filter: `invert(${invert ? 100 : 0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`
-                  }}
+                  style={{}}
                 />
                 {/* Original */}
                 <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none" style={{clipPath:`inset(0 ${100-baSplit}% 0 0)`}}>
@@ -970,9 +998,7 @@ export default function DocumentCleaner() {
             ) : (
               <div className="relative">
                 <canvas ref={canvasRef} className="max-w-full max-h-[35vh] md:max-h-[80vh] object-contain block rounded-xl shadow-2xl"
-                  style={{
-                    filter: `invert(${invert ? 100 : 0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`
-                  }}
+                  style={{}}
                 />
                 {wmText&&(
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden rounded-xl" style={{opacity:wmOpacity/100}}>
