@@ -10,14 +10,24 @@ import {
 import { getFirestore } from 'firebase/firestore'
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAOeHbDs4pPKLl-y9Vk3uL-t_HtxpsveuQ",
-  authDomain: "print-pro-d5e33.firebaseapp.com",
-  projectId: "print-pro-d5e33",
-  storageBucket: "print-pro-d5e33.firebasestorage.app",
-  messagingSenderId: "350007196764",
-  appId: "1:350007196764:web:51a91959a954634dccfa99",
-  measurementId: "G-YXVW9KJ95P"
+  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
+  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
+  measurementId:     import.meta.env.VITE_FIREBASE_MEASUREMENT_ID,
 }
+
+const requiredKeys = [
+  'apiKey', 'authDomain', 'projectId',
+  'storageBucket', 'messagingSenderId', 'appId'
+]
+requiredKeys.forEach(key => {
+  if (!firebaseConfig[key]) {
+    console.error(`Missing Firebase config: ${key}. Check your .env file.`)
+  }
+})
 
 const app = initializeApp(firebaseConfig)
 export const auth = getAuth(app)
