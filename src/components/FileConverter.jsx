@@ -15,6 +15,7 @@ export default function FileConverter() {
   const [splitRange, setSplitRange] = useState('1-5')
   const [state, setState] = useState('idle')
   const [progress, setProgress] = useState('')
+  const [progressNum, setProgressNum] = useState(0)
   
   // PDF Edit settings
   const [pageNumEnabled, setPageNumEnabled] = useState(true)
@@ -24,6 +25,10 @@ export default function FileConverter() {
   const [stampEnabled, setStampEnabled] = useState(false)
   const [stampText, setStampText] = useState('')
   const [stampOpacity, setStampOpacity] = useState(20)
+
+  // PDF Encryption settings
+  const [pdfPassword, setPdfPassword] = useState('')
+  const [pdfEncrypt, setPdfEncrypt]   = useState(false)
 
   // Accordion active section ('task' | 'upload' | 'options')
   const [activeSection, setActiveSection] = useState('task')
@@ -56,6 +61,7 @@ export default function FileConverter() {
     }
     setState('idle')
     setProgress('')
+    setProgressNum(0)
     e.target.value = ''
     
     // Automatically transition to the settings & options section
@@ -68,6 +74,7 @@ export default function FileConverter() {
     setFiles([])
     setState('idle')
     setProgress('')
+    setProgressNum(0)
     // Automatically transition to upload section
     setActiveSection('upload')
   }
@@ -77,6 +84,8 @@ export default function FileConverter() {
     if (!files.length) return;
     setState('processing')
     setProgress('')
+    setProgressNum(10)
+    
     try {
       if (mode === 'merge') {
         setProgress(lang === 'ar' ? 'دمج ملفات PDF…' : 'Merging PDF files…')
@@ -84,6 +93,8 @@ export default function FileConverter() {
         const merged = await PDFDocument.create()
         for (let i = 0; i < files.length; i++) {
           setProgress(lang === 'ar' ? `دمج ${i + 1}/${files.length}…` : `Merging ${i + 1}/${files.length}…`)
+          setProgressNum(Math.round(((i + 1) / files.length) * 100))
+          
           const pdf = await PDFDocument.load(await files[i].arrayBuffer())
           const pages = await merged.copyPages(pdf, pdf.getPageIndices())
           pages.forEach(p => merged.addPage(p))
@@ -93,12 +104,15 @@ export default function FileConverter() {
         const a = document.createElement('a'); a.href = url; a.download = 'PrintPro_Merged.pdf'; a.click(); URL.revokeObjectURL(url)
         addHistoryItem({ type: 'merge', name: lang === 'ar' ? `دمج ${files.length} ملفات` : `Merged ${files.length} files`, thumb: null })
         setState('done')
+        setProgressNum(100)
       } else if (mode === 'split') {
         setProgress(lang === 'ar' ? 'تقسيم PDF…' : 'Splitting PDF…')
+        setProgressNum(30)
         const { PDFDocument } = await loadScript(CDN.pdfLib || 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'PDFLib')
         const pdf = await PDFDocument.load(await files[0].arrayBuffer())
         const parts = splitRange.split('-').map(n => parseInt(n.trim()) - 1)
         let [start, end] = [Math.max(0, parts[0] || 0), Math.min(pdf.getPageCount() - 1, parts[1] ?? parts[0] ?? 0)]
+        setProgressNum(60)
         const newPdf = await PDFDocument.create()
         const copied = await newPdf.copyPages(pdf, Array.from({ length: end - start + 1 }, (_, i) => i + start))
         copied.forEach(p => newPdf.addPage(p))
@@ -107,13 +121,17 @@ export default function FileConverter() {
         const a = document.createElement('a'); a.href = url; a.download = `PrintPro_p${start + 1}-${end + 1}.pdf`; a.click(); URL.revokeObjectURL(url)
         addHistoryItem({ type: 'split', name: lang === 'ar' ? `صفحات ${start + 1}-${end + 1}` : `Pages ${start + 1}-${end + 1}`, thumb: null })
         setState('done')
+        setProgressNum(100)
       } else if (mode === 'edit') {
         setProgress(lang === 'ar' ? 'تحميل مكتبة PDF-lib…' : 'Loading PDF-lib…')
+        setProgressNum(20)
         const { PDFDocument, rgb, StandardFonts } = await loadScript(CDN.pdfLib || 'https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js', 'PDFLib')
         const pdf = await PDFDocument.load(await files[0].arrayBuffer())
         const font = await pdf.embedFont(StandardFonts.HelveticaBold)
         const pages = pdf.getPages()
+        
         pages.forEach((page, idx) => {
+          setProgressNum(Math.round(((idx + 1) / pages.length) * 80))
           const { width, height } = page.getSize()
           if (pageNumEnabled) {
             const num = `${pageNumStart + idx}`;
@@ -130,12 +148,32 @@ export default function FileConverter() {
             page.drawText(stampText, { x: width / 2 - tw2 / 2, y: height / 2 - fs2 / 2, size: fs2, font, color: rgb(.5, .5, .5), opacity: stampOpacity / 100, rotate: { type: 'degrees', angle: 45 } })
           }
         })
+        
         setProgress(lang === 'ar' ? 'جاري الحفظ…' : 'Saving…')
-        const blob = new Blob([await pdf.save()], { type: 'application/pdf' })
+        setProgressNum(90)
+        
+        const pdfBytes = pdfEncrypt && pdfPassword
+          ? await pdf.save({
+              userPassword:  pdfPassword,
+              ownerPassword: pdfPassword + '_owner',
+              permissions: {
+                printing:          'lowResolution',
+                modifying:         false,
+                copying:           false,
+                annotating:        false,
+                fillingForms:      false,
+                contentAccessibility: true,
+                documentAssembly:  false,
+              },
+            })
+          : await pdf.save()
+
+        const blob = new Blob([pdfBytes], { type: 'application/pdf' })
         const url = URL.createObjectURL(blob)
         const a = document.createElement('a'); a.href = url; a.download = 'PrintPro_Edited.pdf'; a.click(); URL.revokeObjectURL(url)
         addHistoryItem({ type: 'edit', name: lang === 'ar' ? 'تحرير PDF' : 'Edit PDF', thumb: null })
         setState('done')
+        setProgressNum(100)
       } else {
         // Convert Mode
         const file = files[0]
@@ -144,25 +182,33 @@ export default function FileConverter() {
         if (ext === 'pdf') {
           if (targetFmt === 'zip') {
             setProgress(lang === 'ar' ? 'تحميل PDF.js و JSZip…' : 'Loading PDF.js and JSZip…')
+            setProgressNum(20)
             const JSZip = await loadScript(CDN.jsZip || 'https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', 'JSZip')
             const pdfjsLib = await loadScript(CDN.pdfJs || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib')
             pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfJsWorker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
             const pdfDoc = await pdfjsLib.getDocument(await file.arrayBuffer()).promise
             const zip = new JSZip(); const folder = zip.folder('pages')
+            
             for (let i = 1; i <= pdfDoc.numPages; i++) {
               setProgress(lang === 'ar' ? `رسم صفحة ${i}/${pdfDoc.numPages}…` : `Rendering page ${i}/${pdfDoc.numPages}…`)
+              setProgressNum(Math.round((i / pdfDoc.numPages) * 100))
               const page = await pdfDoc.getPage(i); const vp = page.getViewport({ scale: 2.5 })
               const c = document.createElement('canvas'); c.width = vp.width; c.height = vp.height
               await page.render({ canvasContext: c.getContext('2d'), viewport: vp }).promise
               folder.file(`page_${String(i).padStart(3, '0')}.jpg`, await new Promise(r => c.toBlob(r, 'image/jpeg', .95)))
             }
-            const zipBlob = await zip.generateAsync({ type: 'blob' }, m => setProgress(lang === 'ar' ? `ضغط ${Math.round(m.percent)}%…` : `Compressing ${Math.round(m.percent)}%…`))
+            const zipBlob = await zip.generateAsync({ type: 'blob' }, m => {
+              setProgress(lang === 'ar' ? `ضغط ${Math.round(m.percent)}%…` : `Compressing ${Math.round(m.percent)}%…`)
+              setProgressNum(Math.round(m.percent))
+            })
             const url = URL.createObjectURL(zipBlob)
             const a = document.createElement('a'); a.href = url; a.download = `${file.name.replace('.pdf', '')}_images.zip`; a.click(); URL.revokeObjectURL(url)
             addHistoryItem({ type: 'convert', name: lang === 'ar' ? `${file.name} ← صور` : `${file.name} ➜ Images`, thumb: null })
             setState('done')
+            setProgressNum(100)
           } else if (targetFmt === 'docx' || targetFmt === 'txt') {
             setProgress(lang === 'ar' ? 'تحميل مكتبة PDF.js…' : 'Loading PDF.js…')
+            setProgressNum(20)
             const pdfjsLib = await loadScript(CDN.pdfJs || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib')
             pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfJsWorker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js'
             
@@ -172,6 +218,7 @@ export default function FileConverter() {
             
             for (let i = 1; i <= pdfDoc.numPages; i++) {
               setProgress(lang === 'ar' ? `استخراج النص صفحة ${i}/${pdfDoc.numPages}…` : `Extracting text page ${i}/${pdfDoc.numPages}…`)
+              setProgressNum(Math.round((i / pdfDoc.numPages) * 100))
               const page = await pdfDoc.getPage(i)
               const textContent = await page.getTextContent()
               
@@ -248,13 +295,16 @@ export default function FileConverter() {
               addHistoryItem({ type: 'convert', name: lang === 'ar' ? `${file.name} ← نص` : `${file.name} ➜ Text`, thumb: null })
             }
             setState('done')
+            setProgressNum(100)
           }
         } else if (ext === 'docx') {
           setProgress(lang === 'ar' ? 'تحميل مكتبة Mammoth.js…' : 'Loading Mammoth.js…')
+          setProgressNum(20)
           const mammoth = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/mammoth/1.6.0/mammoth.browser.min.js', 'mammoth')
           const { jsPDF } = await loadScript(CDN.jsPDF, 'jspdf')
           await loadScript(CDN.html2canvas, 'html2canvas')
           
+          setProgressNum(40)
           const arrayBuffer = await file.arrayBuffer()
           const result = await mammoth.convertToHtml({ arrayBuffer })
           const html = result.value || ''
@@ -264,6 +314,7 @@ export default function FileConverter() {
           }
           
           setProgress(lang === 'ar' ? 'جاري التحويل لـ PDF…' : 'Converting to PDF…')
+          setProgressNum(60)
           const tempDiv = document.createElement('div')
           tempDiv.style.width = '595px' // A4 width in pt
           tempDiv.style.padding = '40px'
@@ -285,6 +336,7 @@ export default function FileConverter() {
             format: 'a4',
           })
           
+          setProgressNum(80)
           await new Promise((resolve, reject) => {
             pdf.html(tempDiv, {
               x: 0,
@@ -302,11 +354,15 @@ export default function FileConverter() {
           
           addHistoryItem({ type: 'convert', name: lang === 'ar' ? `${file.name} ← PDF` : `${file.name} ➜ PDF`, thumb: null })
           setState('done')
+          setProgressNum(100)
         } else if (ext === 'xlsx' || ext === 'xls') {
           setProgress(lang === 'ar' ? 'معالجة Excel…' : 'Processing Excel…')
+          setProgressNum(30)
           const XLSX = await loadScript(CDN.xlsx || 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', 'XLSX')
           const { jsPDF } = await loadScript(CDN.jsPDF || 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf')
           await loadScript(CDN.jsPDFTable || 'https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.25/jspdf.plugin.autotable.min.js', 'jsPDFAutoTable')
+          
+          setProgressNum(60)
           const wb = XLSX.read(await file.arrayBuffer(), { type: 'array' })
           const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1 })
           const pdf = new jsPDF({ orientation: 'landscape', unit: 'pt', format: 'a4' })
@@ -314,13 +370,16 @@ export default function FileConverter() {
           pdf.save(`PrintPro_${file.name.replace(/\.xlsx?/i, '')}.pdf`)
           addHistoryItem({ type: 'convert', name: lang === 'ar' ? `${file.name} ← PDF` : `${file.name} ➜ PDF`, thumb: null })
           setState('done')
+          setProgressNum(100)
         } else if (['png', 'jpg', 'jpeg', 'webp'].includes(ext)) {
           setProgress(lang === 'ar' ? 'تحميل مكتبة PDF…' : 'Loading PDF Library…')
+          setProgressNum(20)
           const { jsPDF } = await loadScript(CDN.jsPDF || 'https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js', 'jspdf')
           let pdf = null
           
           for (let i = 0; i < files.length; i++) {
             setProgress(lang === 'ar' ? `إضافة صورة ${i + 1}/${files.length}…` : `Adding image ${i + 1}/${files.length}…`)
+            setProgressNum(Math.round(((i + 1) / files.length) * 100))
             const file = files[i]
             const imgData = await new Promise((resolve) => {
               const reader = new FileReader()
@@ -355,8 +414,10 @@ export default function FileConverter() {
           }
           addHistoryItem({ type: 'convert', name: lang === 'ar' ? `دمج ${files.length} صور ← PDF` : `Merged ${files.length} images ➜ PDF`, thumb: null })
           setState('done')
+          setProgressNum(100)
         } else {
           setProgress(lang === 'ar' ? 'صيغة غير مدعومة حالياً' : 'Unsupported format currently')
+          setProgressNum(0)
           setTimeout(() => setState('idle'), 2000)
         }
       }
@@ -367,6 +428,7 @@ export default function FileConverter() {
         : 'An error occurred. Please check the file and try again.'
       setErrorMsg(msg)
       setState('idle')
+      setProgressNum(0)
     } finally {
       setIsBusy(false)
     }
@@ -768,6 +830,32 @@ export default function FileConverter() {
                         </div>
                       )}
                     </div>
+                    
+                    {/* PDF Encryption */}
+                    <div className="pt-3 border-t border-white/5 space-y-2">
+                      <label className="flex items-center gap-2.5 bg-white/5 border border-white/5 rounded-xl px-3 py-2.5 cursor-pointer hover:bg-white/10 transition-colors">
+                        <input
+                          type="checkbox"
+                          checked={pdfEncrypt}
+                          onChange={e => setPdfEncrypt(e.target.checked)}
+                          className="w-3.5 h-3.5 accent-indigo-500"
+                        />
+                        <span className="text-xs font-bold text-slate-300">
+                          {lang === 'ar' ? 'حماية بكلمة مرور' : 'Password protect PDF'}
+                        </span>
+                      </label>
+
+                      {pdfEncrypt && (
+                        <input
+                          type="password"
+                          value={pdfPassword}
+                          onChange={e => setPdfPassword(e.target.value)}
+                          placeholder={lang === 'ar' ? 'أدخل كلمة المرور…' : 'Enter password…'}
+                          className="w-full bg-black border border-white/10 rounded-xl px-3 py-2.5 text-white text-xs font-bold outline-none focus:border-indigo-500 transition-colors"
+                        />
+                      )}
+                    </div>
+
                   </div>
                 )}
 
@@ -785,14 +873,22 @@ export default function FileConverter() {
 
         {state === 'processing' && (
           <div className="fu flex flex-col items-center text-center gap-4 py-10">
-            <div className={`w-20 h-20 rounded-full bg-${cfg.c}-500/10 border border-${cfg.c}-500/20 flex items-center justify-center`}>
-              <Loader2 size={36} className={`text-${cfg.c}-400 animate-spin`} />
+            <div className="w-20 h-20 rounded-full bg-indigo-500/10 border border-indigo-500/20 flex items-center justify-center">
+              <Loader2 size={36} className="text-indigo-400 animate-spin" />
             </div>
             <p className="text-xl font-black text-white">{lang === 'ar' ? 'جاري المعالجة…' : 'Processing…'}</p>
             {progress && (
-              <p className="text-sm text-slate-400 font-bold bg-white/5 px-5 py-2.5 rounded-full border border-white/5">
-                {progress}
-              </p>
+              <div className="w-full max-w-xs space-y-2">
+                <div className="w-full bg-white/5 rounded-full h-2 border border-white/5 overflow-hidden">
+                  <div
+                    className="h-full bg-indigo-500 rounded-full transition-all duration-300"
+                    style={{ width: `${progressNum}%` }}
+                  />
+                </div>
+                <p className="text-sm text-slate-400 font-bold text-center">
+                  {progress}
+                </p>
+              </div>
             )}
           </div>
         )}
@@ -826,6 +922,7 @@ export default function FileConverter() {
                 setFiles([])
                 setState('idle')
                 setProgress('')
+                setProgressNum(0)
                 setActiveSection('upload')
               }}
               className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-4 rounded-2xl transition-colors"
@@ -845,6 +942,7 @@ export default function FileConverter() {
               onClick={() => {
                 setState('idle')
                 setProgress('')
+                setProgressNum(0)
                 setActiveSection('options')
               }}
               className="w-full bg-white/10 hover:bg-white/15 text-white font-bold py-3 rounded-2xl transition-colors text-sm"

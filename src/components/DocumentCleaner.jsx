@@ -4,6 +4,7 @@ import {
   Scissors, RotateCw, Sliders, Stamp, ScanText, Plus,
   Sun, Contrast, Palette, X, Check, Copy, Loader2,
   Camera, CheckCircle2, ChevronDown, ChevronUp, Eye,
+  Undo2, Redo2, Share2 // تمت إضافة الأيقونات الجديدة هنا
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 import { FILTER_PRESETS } from '../constants'
@@ -51,9 +52,13 @@ export default function DocumentCleaner() {
   const [isOcr,   setIsOcr]           = useState(false);
   const [isCopied, setIsCopied]       = useState(false);
   const [showCamera, setShowCamera]   = useState(false);
-
+  
   // Accordion active section
   const [activeSection, setActiveSection] = useState('upload');
+
+  // Undo/Redo Refs
+  const undoStackRef = useRef([])
+  const redoStackRef = useRef([])
 
   const canvasRef      = useRef(null);
   const origCanvasRef  = useRef(null);
@@ -68,6 +73,48 @@ export default function DocumentCleaner() {
   const currentSrc = pages[activePage]?.src || null;
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(''),2500); };
+
+  // Undo/Redo Functions
+  const saveSnapshot = () => {
+    if (!canvasRef.current) return
+    undoStackRef.current.push(canvasRef.current.toDataURL('image/jpeg', 0.8))
+    if (undoStackRef.current.length > 15) undoStackRef.current.shift()
+    redoStackRef.current = []
+  }
+
+  const handleUndo = () => {
+    if (!undoStackRef.current.length) return
+    const prev = undoStackRef.current.pop()
+    if (canvasRef.current) {
+      redoStackRef.current.push(canvasRef.current.toDataURL('image/jpeg', 0.8))
+    }
+    const img = new Image()
+    img.onload = () => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d').drawImage(img, 0, 0)
+    }
+    img.src = prev
+  }
+
+  const handleRedo = () => {
+    if (!redoStackRef.current.length) return
+    const next = redoStackRef.current.pop()
+    if (canvasRef.current) {
+      undoStackRef.current.push(canvasRef.current.toDataURL('image/jpeg', 0.8))
+    }
+    const img = new Image()
+    img.onload = () => {
+      const canvas = canvasRef.current
+      if (!canvas) return
+      canvas.width = img.naturalWidth
+      canvas.height = img.naturalHeight
+      canvas.getContext('2d').drawImage(img, 0, 0)
+    }
+    img.src = next
+  }
 
   const getPagesForHistory = async () => {
     const pagesData = [];
@@ -119,7 +166,6 @@ export default function DocumentCleaner() {
       for (const file of validFiles) {
         if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
           showToast(lang === 'ar' ? 'جاري استخراج صفحات الـ PDF...' : 'Extracting PDF pages...');
-          
           const pdfjsLib = await loadScript(CDN.pdfJs || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
           pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfJsWorker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
           
@@ -135,7 +181,6 @@ export default function DocumentCleaner() {
             c.height = vp.height;
             const ctx = c.getContext('2d');
             await page.render({ canvasContext: ctx, viewport: vp }).promise;
-            
             const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.95));
             newPages.push({
               id: Date.now() + Math.random(),
@@ -397,6 +442,7 @@ export default function DocumentCleaner() {
   // Safety net to release ALL remaining blob URLs on component unmount
   const pagesRef = useRef(pages);
   pagesRef.current = pages;
+
   useEffect(() => {
     return () => {
       pagesRef.current.forEach(p => {
@@ -404,7 +450,6 @@ export default function DocumentCleaner() {
       });
     };
   }, []);
-
 
   // ── Upload ────────────────────────────────────────────────────────────────
   const onUpload = (e, append=false) => {
@@ -420,6 +465,7 @@ export default function DocumentCleaner() {
       streamRef.current=s; if(videoRef.current) videoRef.current.srcObject=s;
     } catch { setShowCamera(false); }
   };
+  
   const capturePhoto = () => {
     const v=videoRef.current;
     if (!v) return;
@@ -440,6 +486,7 @@ export default function DocumentCleaner() {
       setActiveSection('crop');
     },'image/jpeg',.95);
   };
+  
   const closeCamera = () => { streamRef.current?.getTracks().forEach(t=>t.stop()); streamRef.current=null; setShowCamera(false); };
 
   // ── Auto Enhance ──────────────────────────────────────────────────────────
@@ -463,14 +510,12 @@ export default function DocumentCleaner() {
   const detectSmartCrop = () => {
     if (!currentSrc) return;
     setIsBusy(true);
-
     const img = new Image();
     img.onload = () => {
       const MAX_W = 500;
       const r = Math.min(1, MAX_W / img.naturalWidth);
       const w = Math.round(img.naturalWidth * r);
       const h = Math.round(img.naturalHeight * r);
-
       const tc = document.createElement('canvas');
       tc.width = w;
       tc.height = h;
@@ -488,7 +533,6 @@ export default function DocumentCleaner() {
       const threshold = Math.max(60, Math.min(200, avgBrightness + 25));
 
       let minX = w, maxX = 0, minY = h, maxY = 0;
-
       for (let y = 0; y < h; y++) {
         for (let x = 0; x < w; x++) {
           const idx = (y * w + x) * 4;
@@ -513,12 +557,10 @@ export default function DocumentCleaner() {
         const y1 = Math.max(0, minY - padY);
         const x2 = Math.min(w, maxX + padX);
         const y2 = Math.min(h, maxY + padY);
-
         const xPct = Math.max(0, Math.min(100, Math.round((x1 / w) * 100)));
         const yPct = Math.max(0, Math.min(100, Math.round((y1 / h) * 100)));
         const wPct = Math.max(10, Math.min(100 - xPct, Math.round(((x2 - x1) / w) * 100)));
         const hPct = Math.max(10, Math.min(100 - yPct, Math.round(((y2 - y1) / h) * 100)));
-
         setCropBox({ x: xPct, y: yPct, w: wPct, h: hPct });
         showToast(lang === 'ar' ? 'تم تحديد حواف المستند تلقائياً! ✓' : 'Document borders detected! ✓');
       }
@@ -599,6 +641,7 @@ export default function DocumentCleaner() {
   }, [cropHandle, forceA4]);
 
   const executeCrop = () => {
+    saveSnapshot() // يتم حفظ حالة قبل القص للتراجع
     setIsBusy(true);
     requestAnimationFrame(()=>{
       const img=cropImgRef.current;
@@ -655,9 +698,30 @@ export default function DocumentCleaner() {
     });
   };
 
+  // ── Share API ─────────────────────────────────────────────────────────────
+  const shareFile = async (blob, filename) => {
+    if (!navigator.share || !navigator.canShare) {
+      showToast(lang === 'ar' ? 'المشاركة غير مدعومة في هذا المتصفح' : 'Sharing not supported in this browser')
+      return
+    }
+    const file = new File([blob], filename, { type: blob.type })
+    if (!navigator.canShare({ files: [file] })) {
+      showToast(lang === 'ar' ? 'لا يمكن مشاركة هذا النوع' : 'Cannot share this file type')
+      return
+    }
+    try {
+      await navigator.share({ files: [file], title: 'PrintPro' })
+    } catch (e) {
+      if (e.name !== 'AbortError') {
+        showToast(lang === 'ar' ? 'فشلت المشاركة' : 'Share failed')
+      }
+    }
+  }
+
   // ── Save PDF (multi-page) ─────────────────────────────────────────────────
   const savePDF = async () => {
-    if (!pages.length) return; setIsBusy(true);
+    if (!pages.length) return;
+    setIsBusy(true);
     const pagesData = await getPagesForHistory();
     try {
       const {jsPDF}=await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','jspdf');
@@ -671,16 +735,13 @@ export default function DocumentCleaner() {
             const c=document.createElement('canvas'); c.width=w; c.height=h;
             const ctx=c.getContext('2d');
             
-            if(idx===activePage) {
-              ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
-              ctx.drawImage(img,0,0,w,h);
-              ctx.filter='none';
-              if(adaptThresh) applyAdaptive(ctx,w,h);
-              if(shadowFix) applyShadowRemoval(ctx,w,h);
-              if(hdSharpen) applySharpen(ctx,w,h);
-            } else {
-              ctx.drawImage(img,0,0,w,h);
-            }
+            ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
+            ctx.drawImage(img,0,0,w,h);
+            ctx.filter='none';
+            if(adaptThresh) applyAdaptive(ctx,w,h);
+            if(shadowFix) applyShadowRemoval(ctx,w,h);
+            if(hdSharpen) applySharpen(ctx,w,h);
+            
             res({data:c.toDataURL('image/jpeg',.9),w,h});
           };
           img.src=pages[idx].src;
@@ -704,7 +765,8 @@ export default function DocumentCleaner() {
   // ── OCR ───────────────────────────────────────────────────────────────────
   const runOCR = async () => {
     if (!canvasRef.current) return;
-    setIsOcr(true); setOcrProg(0); setOcrText('');
+    setIsOcr(true);
+    setOcrProg(0); setOcrText('');
     try {
       const dataUrl=canvasRef.current.toDataURL('image/jpeg',.85);
       const Tesseract=await loadScript('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js','Tesseract');
@@ -733,7 +795,6 @@ export default function DocumentCleaner() {
       };
       img.src=currentSrc;
     },[currentSrc]);
-
     const active = activeFilter===preset.id;
     return (
       <button onClick={()=>applyPreset(preset)}
@@ -790,6 +851,27 @@ export default function DocumentCleaner() {
       {/* ── Preview (Top 45% on mobile, flex-1 on desktop) ── */}
       <div className="h-[42vh] md:h-full flex-shrink-0 md:flex-1 bg-[#0a0a0d] flex flex-col items-center justify-center overflow-hidden relative p-3 md:p-6 touch-none">
 
+        {currentSrc && (
+          <div className="absolute top-3 left-3 flex gap-1.5 z-20">
+            <button
+              onClick={handleUndo}
+              disabled={!undoStackRef.current.length}
+              className="w-8 h-8 bg-black/60 hover:bg-black/80 disabled:opacity-30 rounded-lg flex items-center justify-center transition-all"
+              title={lang === 'ar' ? 'تراجع' : 'Undo'}
+            >
+              <Undo2 size={14} className="text-white" />
+            </button>
+            <button
+              onClick={handleRedo}
+              disabled={!redoStackRef.current.length}
+              className="w-8 h-8 bg-black/60 hover:bg-black/80 disabled:opacity-30 rounded-lg flex items-center justify-center transition-all"
+              title={lang === 'ar' ? 'إعادة' : 'Redo'}
+            >
+              <Redo2 size={14} className="text-white" />
+            </button>
+          </div>
+        )}
+
         {/* Camera overlay */}
         {showCamera&&(
           <div className="absolute inset-0 z-50 bg-black flex flex-col items-center justify-center gap-5">
@@ -821,8 +903,7 @@ export default function DocumentCleaner() {
           <>
             {panel==='crop'?(
               <div ref={cropContRef} className="relative inline-block" style={{ touchAction: 'none' }}>
-                <img ref={cropImgRef} src={currentSrc} alt="crop"
-                  className="max-w-full max-h-[35vh] md:max-h-[80vh] block pointer-events-none" draggable={false}/>
+                <img ref={cropImgRef} src={currentSrc} alt="crop" className="max-w-full max-h-[35vh] md:max-h-[80vh] block pointer-events-none" draggable={false}/>
                 {[
                   {style:{top:0,left:0,right:0,height:`${cropBox.y}%`}},
                   {style:{bottom:0,left:0,right:0,height:`${100-cropBox.y-cropBox.h}%`}},
@@ -946,6 +1027,23 @@ export default function DocumentCleaner() {
                   <button onClick={saveImage} disabled={isBusy} className="flex-1 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors">
                     {isBusy?<Loader2 size={12} className="animate-spin"/>:<ImageIcon size={12}/>}{lang==='ar'?'حفظ كصورة':'Save Image'}
                   </button>
+
+                  {/* زر المشاركة الجديد تمت إضافته هنا */}
+                  {navigator.share && (
+                    <button
+                      onClick={() => {
+                        if (!canvasRef.current) return
+                        canvasRef.current.toBlob(blob => {
+                          shareFile(blob, 'PrintPro_doc.jpg')
+                        }, 'image/jpeg', 1.0)
+                      }}
+                      className="flex-1 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors"
+                    >
+                      <Share2 size={12} />
+                      {lang === 'ar' ? 'مشاركة' : 'Share'}
+                    </button>
+                  )}
+
                   <button onClick={savePDF} disabled={isBusy} className="flex-1 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white font-bold py-2.5 rounded-xl flex items-center justify-center gap-1.5 text-xs transition-colors">
                     {isBusy?<Loader2 size={12} className="animate-spin"/>:<FileText size={12}/>}{lang==='ar'?'حفظ كـ PDF':'Save PDF'}
                   </button>
@@ -1054,7 +1152,7 @@ export default function DocumentCleaner() {
               <div className="pt-3 border-t border-white/5">
                 <button onClick={()=>setShowBA(b=>!b)}
                   className={`w-full flex items-center justify-center gap-1.5 py-2.5 rounded-xl border text-xs font-bold transition-all ${showBA?'bg-indigo-500/20 border-indigo-500/40 text-indigo-300':'bg-white/5 border-white/10 text-slate-400 hover:border-white/20'}`}>
-                  <ImageIcon size={14}/>{showBA? (lang==='ar'?'إخفاء المقارنة':'Hide Compare') : (lang==='ar'?'تفعيل المقارنة (قبل / بعد)':'Show Before / After')}
+                  <ImageIcon size={14}/>{showBA?(lang==='ar'?'إخفاء المقارنة':'Hide Compare') : (lang==='ar'?'تفعيل المقارنة (قبل / بعد)':'Show Before / After')}
                 </button>
               </div>
             </div>
