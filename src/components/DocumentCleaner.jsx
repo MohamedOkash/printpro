@@ -102,6 +102,18 @@ export default function DocumentCleaner() {
     img.src = currentSrc;
   }, [showBA, currentSrc]);
 
+  // Safety net to release ALL remaining blob URLs on component unmount
+  const pagesRef = useRef(pages);
+  pagesRef.current = pages;
+  useEffect(() => {
+    return () => {
+      pagesRef.current.forEach(p => {
+        if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
+      });
+    };
+  }, []);
+
+
   // ── Upload ────────────────────────────────────────────────────────────────
   const onUpload = (e, append=false) => {
     const files = Array.from(e.target.files).filter(f=>f.type.startsWith('image/'));
@@ -111,7 +123,9 @@ export default function DocumentCleaner() {
       setPages(p=>[...p,...newPages]);
       setActivePage(pages.length);
     } else {
-      pages.forEach(p=>{if(p.src.startsWith('blob:'))URL.revokeObjectURL(p.src);});
+      pages.forEach(p => {
+        if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src)
+      })
       setPages(newPages);
       setActivePage(0);
     }
@@ -138,7 +152,9 @@ export default function DocumentCleaner() {
     const c=document.createElement('canvas'); c.width=w; c.height=h;
     c.getContext('2d').drawImage(v,0,0);
     c.toBlob(blob=>{
-      pages.forEach(p=>{if(p.src.startsWith('blob:'))URL.revokeObjectURL(p.src);});
+      pages.forEach(p => {
+        if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src)
+      })
       setPages([{id:Date.now(),src:URL.createObjectURL(blob),name:'camera.jpg'}]);
       setActivePage(0);
       applyPreset(FILTER_PRESETS[0]);
@@ -317,6 +333,8 @@ export default function DocumentCleaner() {
       c.getContext('2d').drawImage(img,(cropBox.x/100)*nw,(cropBox.y/100)*nh,cw,ch,0,0,cw,ch);
       c.toBlob(blob=>{
         const newSrc=URL.createObjectURL(blob);
+        const oldSrc=pages[activePage]?.src;
+        if(oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
         setPages(pp=>pp.map((p,i)=>i===activePage?{...p,src:newSrc}:p));
         setPanel('main'); setIsBusy(false);
         showToast(lang === 'ar' ? 'تم القص بنجاح! ✓' : 'Cropped successfully! ✓');
