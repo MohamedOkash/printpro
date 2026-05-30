@@ -20,6 +20,7 @@ export default function DocumentCleaner() {
   const [grayscale,  setGrayscale]    = useState(0);
   const [invert,     setInvert]       = useState(false);
   const [rotation,   setRotation]     = useState(0);
+  const [flipH,      setFlipH]        = useState(false);
   const [hdSharpen,  setHdSharpen]    = useState(false);
   const [adaptThresh,setAdaptThresh]  = useState(false);
   const [shadowFix,  setShadowFix]    = useState(false);
@@ -78,6 +79,7 @@ export default function DocumentCleaner() {
       if (w>MAX){const r=MAX/w;w=MAX;h=Math.round(h*r);}
       canvas.width=w; canvas.height=h;
       ctx.save(); ctx.translate(w/2,h/2); ctx.rotate(rotation*Math.PI/180);
+      if (flipH) ctx.scale(-1, 1);
       ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
       if(rotation%180!==0) ctx.drawImage(img,-h/2,-w/2,h,w);
       else ctx.drawImage(img,-w/2,-h/2,w,h);
@@ -87,7 +89,7 @@ export default function DocumentCleaner() {
       if (hdSharpen) applySharpen(ctx,w,h);
     };
     img.src = currentSrc;
-  }, [currentSrc,brightness,contrast,grayscale,invert,rotation,panel,adaptThresh,hdSharpen,shadowFix]);
+  }, [currentSrc,brightness,contrast,grayscale,invert,rotation,flipH,panel,adaptThresh,hdSharpen,shadowFix]);
 
   // ── Original for Before/After ─────────────────────────────────────────────
   useEffect(() => {
@@ -383,15 +385,28 @@ export default function DocumentCleaner() {
           const img=new Image();
           img.onload=()=>{
             const MAX=2200; let w=img.naturalWidth,h=img.naturalHeight;
-            if(w>MAX){const r=MAX/w;w=MAX;h=Math.round(h*r);}
-            const c=document.createElement('canvas'); c.width=w; c.height=h;
+            let drawW = w, drawH = h;
+            if (idx===activePage && rotation%180!==0) [drawW, drawH] = [h, w];
+            if(drawW>MAX){const r=MAX/drawW;drawW=MAX;drawH=Math.round(drawH*r);}
+            const c=document.createElement('canvas'); c.width=drawW; c.height=drawH;
             const ctx=c.getContext('2d');
-            if(idx===activePage) ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
-            ctx.drawImage(img,0,0,w,h); ctx.filter='none';
-            if(idx===activePage&&adaptThresh) applyAdaptive(ctx,w,h);
-            if(idx===activePage&&shadowFix) applyShadowRemoval(ctx,w,h);
-            if(idx===activePage&&hdSharpen) applySharpen(ctx,w,h);
-            res({data:c.toDataURL('image/jpeg',.9),w,h});
+            if(idx===activePage) {
+              ctx.save();
+              ctx.translate(drawW/2, drawH/2);
+              ctx.rotate(rotation*Math.PI/180);
+              if (flipH) ctx.scale(-1, 1);
+              ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
+              if(rotation%180!==0) ctx.drawImage(img,-drawH/2,-drawW/2,drawH,drawW);
+              else ctx.drawImage(img,-drawW/2,-drawH/2,drawW,drawH);
+              ctx.restore();
+            } else {
+              ctx.drawImage(img,0,0,drawW,drawH);
+            }
+            ctx.filter='none';
+            if(idx===activePage&&adaptThresh) applyAdaptive(ctx,drawW,drawH);
+            if(idx===activePage&&shadowFix) applyShadowRemoval(ctx,drawW,drawH);
+            if(idx===activePage&&hdSharpen) applySharpen(ctx,drawW,drawH);
+            res({data:c.toDataURL('image/jpeg',.9),w:drawW,h:drawH});
           };
           img.src=pages[idx].src;
         });
@@ -551,7 +566,21 @@ export default function DocumentCleaner() {
                   ].map(([h, cls]) => (
                     <div key={h} className={`absolute ${cls} w-6 h-6 flex items-center justify-center z-20 cursor-pointer`}
                       style={{ touchAction: 'none' }}
-                      onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setCropHandle(h); }}>
+                      onPointerDown={e => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.setPointerCapture(e.pointerId);
+                        setCropHandle(h);
+                      }}
+                      onPointerUp={e => {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                        setCropHandle(null);
+                      }}
+                      onPointerCancel={e => {
+                        e.currentTarget.releasePointerCapture(e.pointerId);
+                        setCropHandle(null);
+                      }}
+                    >
                       <div className={`w-3.5 h-3.5 bg-white border-2 border-emerald-500 shadow-md ${
                         h.length === 1 ? 'rounded' : 'rounded-full'
                       }`}/>
@@ -563,7 +592,21 @@ export default function DocumentCleaner() {
               /* ── Before / After ── */
               <div ref={baContRef} className="relative inline-block max-w-full select-none cursor-ew-resize"
                 style={{ touchAction: 'none' }}
-                onPointerDown={()=>setIsDraggingBA(true)}>
+                onPointerDown={e => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                  setIsDraggingBA(true);
+                }}
+                onPointerUp={e => {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                  setIsDraggingBA(false);
+                }}
+                onPointerCancel={e => {
+                  e.currentTarget.releasePointerCapture(e.pointerId);
+                  setIsDraggingBA(false);
+                }}
+              >
                 {/* Processed */}
                 <canvas ref={canvasRef} className="block max-w-full max-h-[35vh] md:max-h-[80vh] rounded-xl shadow-2xl"/>
                 {/* Original */}
@@ -645,12 +688,15 @@ export default function DocumentCleaner() {
           {/* Section 2: Crop & Rotate */}
           <AccordionSection id="crop" label={lang==='ar'?'قص وتدوير الصفحة':'Crop & Rotate'} icon={Scissors} color="indigo">
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-2">
-                <button onClick={detectSmartCrop} className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-black rounded-xl flex items-center justify-center gap-1.5 transition-colors">
-                  <Wand2 size={13}/>{lang==='ar'?'القص التلقائي الذكي':'Auto Smart Crop'}
+              <div className="grid grid-cols-3 gap-2">
+                <button onClick={detectSmartCrop} className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-xl flex items-center justify-center gap-1 transition-colors">
+                  <Wand2 size={12}/>{lang==='ar'?'القص الذكي':'Smart Crop'}
                 </button>
-                <button onClick={()=>setRotation(r=>(r+90)%360)} className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-xs font-bold text-slate-300 flex items-center justify-center gap-1.5 transition-colors">
-                  <RotateCw size={13}/>{lang==='ar'?'تدوير 90°':'Rotate 90°'}
+                <button onClick={()=>setRotation(r=>(r+90)%360)} className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1 transition-colors">
+                  <RotateCw size={12}/>{lang==='ar'?'تدوير 90°':'Rotate 90°'}
+                </button>
+                <button onClick={()=>setFlipH(f=>!f)} className={`py-2.5 border rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition-colors ${flipH ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300' : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'}`}>
+                  <Sliders size={12}/>{lang==='ar'?'عكس أفقي':'Mirror H'}
                 </button>
               </div>
 
@@ -694,13 +740,14 @@ export default function DocumentCleaner() {
                       <span className={`flex items-center gap-1.5 ${c}`}><Icon size={12}/>{label}</span>
                       <span className="text-slate-500">{val}%</span>
                     </div>
-                    <input type="range" min={min} max={max} value={val} onChange={e=>set(Number(e.target.value))} className="w-full h-1.5 accent-indigo-500"/>
+                    <input type="range" min={min} max={max} value={val} onChange={e=>set(Number(e.target.value))} onPointerDown={e => e.stopPropagation()} className="w-full h-1.5 accent-indigo-500"/>
                   </div>
                 ))}
               </div>
 
               <div className="space-y-2 pt-2 border-t border-white/5">
                 {[
+                  {label:lang==='ar'?'عكس الألوان (سالب)':'Invert Colors (Negative)', val:invert, set:setInvert},
                   {label:lang==='ar'?'HD Sharpen للطباعة':'HD Sharpen (Printing)', val:hdSharpen,  set:setHdSharpen},
                   {label:lang==='ar'?'تبييض تكيّفي (CamScanner)':'Adaptive White (CamScanner)', val:adaptThresh,set:setAdaptThresh},
                   {label:lang==='ar'?'إزالة الظلال والإضاءة غير المتكافئة':'Remove Shadows & Glow', val:shadowFix, set:setShadowFix},
@@ -773,7 +820,7 @@ export default function DocumentCleaner() {
                 {wmText && (
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] text-slate-500 font-bold whitespace-nowrap">{t('opacity')}</span>
-                    <input type="range" min={5} max={100} value={wmOpacity} onChange={e=>setWmOpacity(Number(e.target.value))} className="flex-1 h-1.5 accent-pink-500"/>
+                    <input type="range" min={5} max={100} value={wmOpacity} onChange={e=>setWmOpacity(Number(e.target.value))} onPointerDown={e => e.stopPropagation()} className="flex-1 h-1.5 accent-pink-500"/>
                     <span className="text-xs text-pink-400 font-bold w-8 text-center">{wmOpacity}%</span>
                   </div>
                 )}
