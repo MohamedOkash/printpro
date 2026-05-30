@@ -25,6 +25,7 @@ import {
 const T = {
   ar: {
     appTitle:'برينت برو', appSubtitle:'حلول المكتبات الذكية',
+    assistantTab:'المساعد الذكي',
     cleanerTab:'معالج المستندات', designerTab:'مصمم الأغلفة',
     converterTab:'أدوات PDF',     historyTab:'المشاريع',
     upload:'رفع صورة',   camera:'كاميرا',     autoEnhance:'تبييض ذكي',
@@ -40,8 +41,8 @@ const T = {
     success:'تم بنجاح!', newTask:'مهمة جديدة',
     forceA4:'نسبة A4',   stickers:'ملصقات',   aiCover:'ذكاء اصطناعي',
     generate:'توليد النصوص', generating:'جاري التوليد…',
-    dropHere:'اسحب الصورة هنا أو اضغط للرفع',
-    supportedFormats:'JPG, PNG, WEBP, HEIC',
+    dropHere:'اسحب المستند (PDF أو صورة) هنا أو اضغط للرفع',
+    supportedFormats:'PDF, JPG, PNG, WEBP, HEIC',
     elements:'عناصر',    styles:'التصميم',     colors:'ألوان',
     layerUp:'للأمام',    layerDown:'للخلف',    opacity:'الشفافية',
     textColor:'لون النصوص', bgColor:'لون الخلفية', borderColor:'لون الأشكال',
@@ -79,6 +80,7 @@ const T = {
   },
   en: {
     appTitle:'PrintPro', appSubtitle:'Smart Print Shop Tools',
+    assistantTab:'Smart Assistant',
     cleanerTab:'Doc Cleaner', designerTab:'Cover Designer',
     converterTab:'PDF Tools', historyTab:'Projects',
     upload:'Upload',   camera:'Camera',     autoEnhance:'Auto Enhance',
@@ -94,8 +96,8 @@ const T = {
     success:'Done!', newTask:'New Task',
     forceA4:'A4 Ratio', stickers:'Stickers', aiCover:'AI Generate',
     generate:'Generate Text', generating:'Generating…',
-    dropHere:'Drop image here or click to upload',
-    supportedFormats:'JPG, PNG, WEBP, HEIC',
+    dropHere:'Drop document (PDF or image) here or click to upload',
+    supportedFormats:'PDF, JPG, PNG, WEBP, HEIC',
     elements:'Elements', styles:'Styles', colors:'Colors',
     layerUp:'Forward', layerDown:'Back', opacity:'Opacity',
     textColor:'Text Color', bgColor:'Background', borderColor:'Shape Color',
@@ -147,6 +149,8 @@ export default function AppProvider({ children, lang, setLang }) {
   const [guestMode, setGuestMode] = useState(false)
   const [history, setHistory] = useState([])
   const [activeEditDesign, setActiveEditDesign] = useState(null)
+  const [activeEditCleaner, setActiveEditCleaner] = useState(null)
+  const [sharedFiles, setSharedFiles] = useState([])
 
   // Translate function
   const t = useCallback((key, vars = {}) => {
@@ -335,7 +339,11 @@ export default function AppProvider({ children, lang, setLang }) {
         signupWithEmail,
         logout,
         activeEditDesign,
-        setActiveEditDesign
+        setActiveEditDesign,
+        activeEditCleaner,
+        setActiveEditCleaner,
+        sharedFiles,
+        setSharedFiles
       }}
     >
       {children}

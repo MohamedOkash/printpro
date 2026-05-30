@@ -1,11 +1,48 @@
 const generateFallbackResponse = (prompt) => {
-  const subjectMatch = prompt.match(/المادة:\s*([^,]+)/)
-  const gradeMatch   = prompt.match(/الصف:\s*([^,]+)/)
-  const teacherMatch = prompt.match(/المعلم:\s*([^.]+)/)
+  const subjectMatch = prompt.match(/(?:المادة|Subject):\s*([^,\n]+)/i)
+  const gradeMatch   = prompt.match(/(?:الصف|Grade):\s*([^,\n]+)/i)
+  const teacherMatch = prompt.match(/(?:المعلم|Teacher):\s*([^.\n]+)/i)
 
-  const subject = subjectMatch ? subjectMatch[1].trim() : 'المادة'
+  const isEnglish = !/[\u0600-\u06FF]/.test(prompt)
+
+  const subject = subjectMatch ? subjectMatch[1].trim() : (isEnglish ? 'Subject' : 'المادة')
   const grade   = gradeMatch   ? gradeMatch[1].trim()   : ''
   const teacher = teacherMatch ? teacherMatch[1].trim() : ''
+
+  if (isEnglish) {
+    const subjectTitles = {
+      'math':         ['Advanced Mathematics Series', 'The Math Professor Guide', 'Golden Math Book'],
+      'physics':      ['Genius in Physics', 'Physics Made Simple', 'Modern Physics Guide'],
+      'chemistry':    ['Al-Razi in Chemistry', 'Chemistry Excellence Series', 'High School Chemistry'],
+      'biology':      ['The Doctor in Biology', 'Life Science Series', 'Biology Essentials'],
+      'arabic':       ['Al-Dad in Arabic Language', 'The Arabic Masterclass', 'Arabic Language Guide'],
+      'english':      ['The Legend in English', 'First Class English', 'English Zone'],
+      'history':      ['The Historian Chronicles', 'Genius of History Series', 'Gateway to History'],
+      'geography':    ['Professional Geographer Series', 'Atlas Geography Guide', 'Simplified Geography'],
+    }
+
+    let titleList = [
+      `Excellence and Success in ${subject}`,
+      `Final Revision Notebook in ${subject}`,
+      `Smart Student Guide in ${subject}`,
+    ]
+    for (const [key, list] of Object.entries(subjectTitles)) {
+      if (subject.toLowerCase().includes(key) || key.includes(subject.toLowerCase())) {
+        titleList = list
+        break
+      }
+    }
+
+    return {
+      title:    titleList[Math.floor(Math.random() * titleList.length)],
+      subtitle: grade && grade !== 'unspecified' && grade !== 'غير محدد'
+        ? `${grade} - First Semester`
+        : 'New Academic Year Curriculum',
+      author: teacher && teacher !== 'unspecified' && teacher !== 'غير محدد'
+        ? (teacher.toLowerCase().startsWith('prepared') ? teacher : `Prepared by: ${teacher}`)
+        : 'Prepared by elite educators',
+    }
+  }
 
   const subjectTitles = {
     'الرياضيات':         ['سلسلة المتميز في الرياضيات',  'البروفيسور في الرياضيات',   'الرياضيات الذهبية'],

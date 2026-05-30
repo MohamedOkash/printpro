@@ -138,6 +138,49 @@ export default function CoverFrame({ borderColor: bc, frameStyle }) {
           ))}
         </div>
       ),
+      'academic-lines': (
+        <>
+          <div className="absolute inset-4 border-[2px]" style={{ borderColor: bc }} />
+          <div className="absolute inset-6 border-[1px]" style={{ borderColor: bc }} />
+        </>
+      ),
+      'tech-corners': (
+        <>
+          <div className="absolute top-4 left-4 w-12 h-12 border-t-4 border-l-4" style={{ borderColor: bc }} />
+          <div className="absolute top-4 right-4 w-12 h-12 border-t-4 border-r-4" style={{ borderColor: bc }} />
+          <div className="absolute bottom-4 left-4 w-12 h-12 border-b-4 border-l-4" style={{ borderColor: bc }} />
+          <div className="absolute bottom-4 right-4 w-12 h-12 border-b-4 border-r-4" style={{ borderColor: bc }} />
+        </>
+      ),
+      'gradient-mesh': (
+        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+          <div className="absolute -top-20 -left-20 w-80 h-80 rounded-full blur-[80px] opacity-40" style={{ backgroundColor: bc }} />
+          <div className="absolute -bottom-20 -right-20 w-80 h-80 rounded-full blur-[80px] opacity-40" style={{ backgroundColor: bc }} />
+        </div>
+      ),
+      'vintage-ornament': (
+        <div className="absolute inset-4 border-2 pointer-events-none" style={{ borderColor: bc }}>
+          <div className="absolute inset-2 border border-dashed pointer-events-none" style={{ borderColor: bc }} />
+          <div className="absolute top-1 left-1 w-6 h-6 border-b border-r" style={{ borderColor: bc }} />
+          <div className="absolute top-1 right-1 w-6 h-6 border-b border-l" style={{ borderColor: bc }} />
+          <div className="absolute bottom-1 left-1 w-6 h-6 border-t border-r" style={{ borderColor: bc }} />
+          <div className="absolute bottom-1 right-1 w-6 h-6 border-t border-l" style={{ borderColor: bc }} />
+        </div>
+      ),
+      'stars-border': (
+        <div className="absolute inset-4 border border-white/10 pointer-events-none">
+          <div className="absolute top-2 left-2 right-2 flex justify-between pointer-events-none">
+            {[...Array(6)].map((_, i) => (
+              <span key={i} className="text-xs" style={{ color: bc }}>★</span>
+            ))}
+          </div>
+          <div className="absolute bottom-2 left-2 right-2 flex justify-between pointer-events-none">
+            {[...Array(6)].map((_, i) => (
+              <span key={i} className="text-xs" style={{ color: bc }}>★</span>
+            ))}
+          </div>
+        </div>
+      ),
     }
     return frames[frameStyle] ?? frames['modern-waves']
   // eslint-disable-next-line react-hooks/exhaustive-deps

@@ -11,23 +11,24 @@ import { callClaudeAPI } from '../utils/api'
 import CoverFrame from './CoverFrame'
 
 const getBackgroundPrompt = (subject) => {
-  const map = {
-    'رياضيات': 'Mathematical geometry patterns, school blackboard formulas, clean vector design, modern educational poster background, indigo and purple aesthetic, minimal, high-resolution, A4 format, no text',
-    'فيزياء': 'Physics science blackboard formulas, quantum mechanism illustration, atoms and energy fields, glowing line art vector, minimal dark background, high resolution, A4 format, no text',
-    'كيمياء': 'Chemistry elements, molecule structures, glass test tubes and reactions illustration, colorful educational vector, clean graphic background, high resolution, A4 format, no text',
-    'أحياء': 'Biology cells, DNA spiral, green leaf veins, natural science vector pattern, cute educational layout, high resolution, A4 format, no text',
-    'لغة عربية': 'Arabic calligraphy art elements, abstract fluid shapes, elegant Islamic geometric patterns, gold and teal aesthetic background, high resolution, A4 format, no text',
-    'دراسات': 'Old world map, compass, school globe, history and geography illustration, vector art flat design style, clean colorful background, high resolution, A4 format, no text',
-    'تاريخ': 'Ancient historical pyramids, scrolls, hourglass illustration, history educational vector graphics, warm color palette, high resolution, A4 format, no text',
-    'جغرافيا': 'Topographical atlas map, rotating school globe, compass illustration, clean colorful geography vector design, high resolution, A4 format, no text',
-    'إنجليزي': 'London Big Ben tower, red telephone booth, cute educational English doodles, flat vector style, bright modern background, high resolution, A4 format, no text',
-    'فرنسي': 'Paris Eiffel tower illustration, French flag colors, flat vector educational art style, clean bright layout, high resolution, A4 format, no text',
-  };
+  const sLower = subject.toLowerCase();
+  const map = [
+    { keys: ['رياضيات', 'math'], prompt: 'Mathematical geometry patterns, school blackboard formulas, clean vector design, modern educational poster background, indigo and purple aesthetic, minimal, high-resolution, A4 format, no text' },
+    { keys: ['فيزياء', 'physic'], prompt: 'Physics science blackboard formulas, quantum mechanism illustration, atoms and energy fields, glowing line art vector, minimal dark background, high resolution, A4 format, no text' },
+    { keys: ['كيمياء', 'chemist'], prompt: 'Chemistry elements, molecule structures, glass test tubes and reactions illustration, colorful educational vector, clean graphic background, high resolution, A4 format, no text' },
+    { keys: ['أحياء', 'biolog'], prompt: 'Biology cells, DNA spiral, green leaf veins, natural science vector pattern, cute educational layout, high resolution, A4 format, no text' },
+    { keys: ['لغة عربية', 'arabic'], prompt: 'Arabic calligraphy art elements, abstract fluid shapes, elegant Islamic geometric patterns, gold and teal aesthetic background, high resolution, A4 format, no text' },
+    { keys: ['دراسات', 'social'], prompt: 'Old world map, compass, school globe, history and geography illustration, vector art flat design style, clean colorful background, high resolution, A4 format, no text' },
+    { keys: ['تاريخ', 'histor'], prompt: 'Ancient historical pyramids, scrolls, hourglass illustration, history educational vector graphics, warm color palette, high resolution, A4 format, no text' },
+    { keys: ['جغرافيا', 'geograph'], prompt: 'Topographical atlas map, rotating school globe, compass illustration, clean colorful geography vector design, high resolution, A4 format, no text' },
+    { keys: ['إنجليزي', 'english'], prompt: 'London Big Ben tower, red telephone booth, cute educational English doodles, flat vector style, bright modern background, high resolution, A4 format, no text' },
+    { keys: ['فرنسي', 'french'], prompt: 'Paris Eiffel tower illustration, French flag colors, flat vector educational art style, clean bright layout, high resolution, A4 format, no text' },
+  ];
 
   let prompt = 'Cute school doodles, open books, pencils, school supplies pattern, colorful vector art, educational background, clean graphic illustration, high resolution, A4 format, no text';
-  for (const [key, value] of Object.entries(map)) {
-    if (subject.includes(key) || key.includes(subject)) {
-      prompt = value;
+  for (const item of map) {
+    if (item.keys.some(k => sLower.includes(k) || k.includes(sLower))) {
+      prompt = item.prompt;
       break;
     }
   }
@@ -35,7 +36,27 @@ const getBackgroundPrompt = (subject) => {
 };
 
 export default function CoverDesigner() {
-  const { addHistoryItem, lang } = useApp()
+  const { addHistoryItem, lang, sharedFiles, setSharedFiles, activeEditDesign, setActiveEditDesign } = useApp()
+
+  useEffect(() => {
+    if (sharedFiles && sharedFiles.length > 0) {
+      const file = sharedFiles[0];
+      if (file.type.startsWith('image/')) {
+        const src = URL.createObjectURL(file);
+        setDesign(p => ({ ...p, bgImage: src }));
+      }
+      setSharedFiles([]);
+    }
+  }, [sharedFiles, setSharedFiles]);
+
+  useEffect(() => {
+    if (activeEditDesign) {
+      if (activeEditDesign.design) setDesign(activeEditDesign.design)
+      if (activeEditDesign.elements) setElements(activeEditDesign.elements)
+      setActiveEditDesign(null)
+    }
+  }, [activeEditDesign, setActiveEditDesign])
+
   const [design, setDesign] = useState({
     bgColor: '#ffffff',
     borderColor: '#4f46e5',
@@ -85,6 +106,34 @@ export default function CoverDesigner() {
       }
     }
   }, [editingTextId])
+
+  // Automatically translate default cover text elements when language switches
+  useEffect(() => {
+    setElements(prev => prev.map(el => {
+      if (el.id === 't1') {
+        if (lang === 'en' && el.text === 'المراجعة النهائية') {
+          return { ...el, text: 'Final Revision' }
+        } else if (lang === 'ar' && el.text === 'Final Revision') {
+          return { ...el, text: 'المراجعة النهائية' }
+        }
+      }
+      if (el.id === 't2') {
+        if (lang === 'en' && el.text === 'الصف الثالث الثانوي') {
+          return { ...el, text: 'Third Secondary Grade' }
+        } else if (lang === 'ar' && el.text === 'Third Secondary Grade') {
+          return { ...el, text: 'الصف الثالث الثانوي' }
+        }
+      }
+      if (el.id === 't3') {
+        if (lang === 'en' && el.text === 'إعداد المعلم:') {
+          return { ...el, text: 'Prepared by Teacher:' }
+        } else if (lang === 'ar' && el.text === 'Prepared by Teacher:') {
+          return { ...el, text: 'إعداد المعلم:' }
+        }
+      }
+      return el
+    }))
+  }, [lang])
 
   const addText = () => {
     const id = `t-${Date.now()}`
@@ -160,7 +209,9 @@ export default function CoverDesigner() {
   const handleAI = async () => {
     if (!aiForm.subject) return; setIsAI(true)
     try {
-      const prompt = `أنت مصمم أغلفة مذكرات تعليمية. المادة: ${aiForm.subject}, الصف: ${aiForm.grade || 'غير محدد'}, المعلم: ${aiForm.teacher || 'غير محدد'}. أعد JSON فقط بلا أي نص إضافي: {"title":"عنوان جذاب","subtitle":"تفاصيل الصف","author":"إعداد المعلم: [الاسم]"}`;
+      const prompt = lang === 'ar'
+        ? `أنت مصمم أغلفة مذكرات تعليمية. المادة: ${aiForm.subject}, الصف: ${aiForm.grade || 'غير محدد'}, المعلم: ${aiForm.teacher || 'غير محدد'}. أعد JSON فقط بلا أي نص إضافي: {"title":"عنوان جذاب","subtitle":"تفاصيل الصف","author":"إعداد المعلم: [الاسم]"}`
+        : `You are an educational book cover designer. Subject: ${aiForm.subject}, Grade: ${aiForm.grade || 'unspecified'}, Teacher: ${aiForm.teacher || 'unspecified'}. Return JSON only with no other text: {"title":"Attractive Title","subtitle":"Grade Details","author":"Prepared by Teacher: [Name]"}`;
       const r = await callClaudeAPI(prompt)
       if (r) {
         setElements(p => p.map(e => {
@@ -229,7 +280,17 @@ export default function CoverDesigner() {
     const h2c = await loadScript('https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js', 'html2canvas')
     h2c(coverRef.current, { scale: 3, useCORS: true, backgroundColor: design.bgColor }).then(c => {
       const a = document.createElement('a'); a.download = 'PrintPro_Cover.png'; a.href = c.toDataURL('image/png'); a.click()
-      addHistoryItem({ type: 'cover', name: lang === 'ar' ? 'غلاف مذكرة' : 'Cover Design', thumb: c.toDataURL('image/jpeg', .1) })
+      const mainTitleEl = elements.find(e => e.id === 't1' || e.id === 'title')
+      const designName = mainTitleEl ? mainTitleEl.text : (lang === 'ar' ? 'غلاف مذكرة' : 'Cover Design')
+      addHistoryItem({
+        type: 'cover',
+        name: designName,
+        thumb: c.toDataURL('image/jpeg', .1),
+        projectData: {
+          design,
+          elements
+        }
+      })
     })
   }
 
@@ -317,8 +378,10 @@ export default function CoverDesigner() {
                   onDoubleClick={e => { e.stopPropagation(); setEditingTextId(el.id); setSelected(el.id); }}
                   contentEditable={isEditing}
                   suppressContentEditableWarning={true}
-                  onInput={e => updateEl(el.id, 'text', e.target.innerText)}
-                  onBlur={() => setEditingTextId(null)}
+                  onBlur={e => {
+                    updateEl(el.id, 'text', e.target.innerText || '');
+                    setEditingTextId(null);
+                  }}
                   onKeyDown={e => {
                     if (e.key === 'Enter') {
                       e.preventDefault()
@@ -567,7 +630,7 @@ export default function CoverDesigner() {
                               : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/15'
                           }`}
                         >
-                          {fr.name}
+                          {lang === 'ar' ? fr.name : fr.nameEn}
                         </button>
                       ))}
                     </div>

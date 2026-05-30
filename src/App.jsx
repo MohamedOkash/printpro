@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { Printer, Sliders, LayoutTemplate, FileArchive, History, Globe, LogOut } from 'lucide-react'
+import { Printer, Sliders, LayoutTemplate, FileArchive, History, Globe, LogOut, Sparkles } from 'lucide-react'
 import { useApp } from './context/AppContext'
 import DocumentCleaner  from './components/DocumentCleaner'
 import CoverDesigner    from './components/CoverDesigner'
 import FileConverter    from './components/FileConverter'
 import ProjectHistory   from './components/ProjectHistory'
 import Login            from './components/Login'
+import SmartAssistant   from './components/SmartAssistant'
 
 const TABS = [
+  { id:'assistant', icon:Sparkles,       labelKey:'assistantTab',c:'indigo'  },
   { id:'cleaner',   icon:Sliders,        labelKey:'cleanerTab',  c:'emerald' },
   { id:'designer',  icon:LayoutTemplate, labelKey:'designerTab', c:'purple'  },
   { id:'converter', icon:FileArchive,    labelKey:'converterTab',c:'amber'   },
@@ -15,6 +17,7 @@ const TABS = [
 ]
 
 const TAB_ACTIVE_CLASSES = {
+  indigo:  'text-indigo-400 bg-indigo-500/10 border-indigo-500/25',
   emerald: 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25',
   purple:  'text-purple-400 bg-purple-500/10 border-purple-500/25',
   amber:   'text-amber-400 bg-amber-500/10 border-amber-500/25',
@@ -22,6 +25,7 @@ const TAB_ACTIVE_CLASSES = {
 }
 
 const TAB_MOBILE_ACTIVE_TEXT = {
+  indigo:  'text-indigo-400',
   emerald: 'text-emerald-400',
   purple:  'text-purple-400',
   amber:   'text-amber-400',
@@ -40,7 +44,7 @@ export default function App() {
     logout
   } = useApp()
 
-  const [tab, setTab] = useState('cleaner')
+  const [tab, setTab] = useState('assistant')
 
   if (authLoading) {
     return (
@@ -146,10 +150,11 @@ export default function App() {
 
         {/* Active component */}
         <main className="flex-1 overflow-hidden">
+          {tab === 'assistant' && <SmartAssistant onNavigate={setTab} />}
           {tab === 'cleaner'   && <DocumentCleaner />}
           {tab === 'designer'  && <CoverDesigner />}
           {tab === 'converter' && <FileConverter />}
-          {tab === 'history'   && <ProjectHistory />}
+          {tab === 'history'   && <ProjectHistory onNavigate={setTab} />}
         </main>
 
         {/* Mobile bottom nav */}

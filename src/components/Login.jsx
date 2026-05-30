@@ -51,7 +51,7 @@ export default function Login() {
       await loginWithGoogle()
     } catch (err) {
       console.error(err)
-      setError(t('authError'))
+      setError(err.code ? `${t('authError')} (${err.code})` : err.message || t('authError'))
     } finally {
       setLoading(false)
     }

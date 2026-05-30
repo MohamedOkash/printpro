@@ -3,19 +3,34 @@ import {
   History, FolderOpen, Trash2,
   Image as ImageIcon, FileText, LayoutTemplate,
   FilePlus2, SplitSquareHorizontal, FileEdit, FileArchive,
+  X, Eye
 } from 'lucide-react'
 import { useApp } from '../context/AppContext'
 
-export default function ProjectHistory() {
+export default function ProjectHistory({ onNavigate }) {
   const {
     t,
     lang,
     history,
     deleteHistoryItem,
-    clearHistory
+    clearHistory,
+    setActiveEditDesign,
+    setActiveEditCleaner
   } = useApp()
 
   const [filter, setFilter] = useState('all')
+  const [previewItem, setPreviewItem] = useState(null)
+
+  const resumeProject = (item) => {
+    if (!item.projectData) return
+    if (item.type === 'cover') {
+      setActiveEditDesign(item.projectData)
+      onNavigate('designer')
+    } else if (item.type === 'image' || item.type === 'pdf') {
+      setActiveEditCleaner(item.projectData)
+      onNavigate('cleaner')
+    }
+  }
 
   const TYPE_CFG = {
     image:  { label: lang === 'ar' ? 'صورة' : 'Image',       c: 'emerald', icon: ImageIcon },
@@ -136,18 +151,99 @@ export default function ProjectHistory() {
                     <p className="text-sm font-bold text-slate-200 truncate">{item.name}</p>
                     <p className="text-xs text-slate-500 font-bold mt-0.5">{formatDate(item.date)}</p>
                   </div>
-                  <button
-                    onClick={() => deleteHistoryItem(item.id)}
-                    className="opacity-0 group-hover:opacity-100 p-2 bg-red-500/10 hover:bg-red-500/20 rounded-xl text-red-400 transition-all flex-shrink-0"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+                  <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                    {item.projectData && ['cover', 'image', 'pdf'].includes(item.type) && (
+                      <button
+                        onClick={() => resumeProject(item)}
+                        className="p-2 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-xl text-indigo-400 transition-colors"
+                        title={lang === 'ar' ? 'تعديل واستكمال العمل' : 'Resume / Edit'}
+                      >
+                        <FolderOpen size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => setPreviewItem(item)}
+                      className="p-2 bg-white/5 hover:bg-white/10 rounded-xl text-slate-400 hover:text-white transition-colors"
+                      title={lang === 'ar' ? 'عرض التفاصيل والمعاينة' : 'View Details & Preview'}
+                    >
+                      <Eye size={13} />
+                    </button>
+                    <button
+                      onClick={() => deleteHistoryItem(item.id)}
+                      className="p-2 bg-red-500/10 hover:bg-red-500/20 rounded-xl text-red-400 transition-colors"
+                      title={lang === 'ar' ? 'حذف المشروع' : 'Delete Project'}
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
               )
             })}
           </div>
         )}
       </div>
+
+      {/* Preview Modal Overlay */}
+      {previewItem && (
+        <div className="absolute inset-0 z-50 bg-black/80 backdrop-blur-sm flex items-center justify-center p-4">
+          <div className="bg-[#18181b] border border-white/10 rounded-3xl p-5 w-full max-w-md shadow-2xl flex flex-col gap-4 relative">
+            <button 
+              onClick={() => setPreviewItem(null)} 
+              className="absolute top-4 right-4 p-1 hover:bg-white/10 rounded-full text-slate-400 hover:text-white"
+            >
+              <X size={16} />
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 bg-sky-500/20 rounded-xl flex items-center justify-center">
+                <FolderOpen size={18} className="text-sky-400" />
+              </div>
+              <div>
+                <h3 className="font-black text-white text-base truncate max-w-[240px]">{previewItem.name}</h3>
+                <p className="text-[10px] text-slate-500 font-bold mt-0.5">{formatDate(previewItem.date)}</p>
+              </div>
+            </div>
+            
+            <div className="w-full aspect-[4/3] bg-black/40 border border-white/5 rounded-2xl overflow-hidden flex items-center justify-center p-2">
+              {previewItem.thumb ? (
+                <img src={previewItem.thumb} alt="" className="max-w-full max-h-full object-contain rounded-lg" />
+              ) : (
+                <div className="text-slate-600 flex flex-col items-center gap-2">
+                  <FolderOpen size={40} />
+                  <span className="text-xs font-bold">{lang === 'ar' ? 'لا توجد صورة معاينة' : 'No preview image'}</span>
+                </div>
+              )}
+            </div>
+
+            <div className="flex gap-2.5">
+              {previewItem.projectData && ['cover', 'image', 'pdf'].includes(previewItem.type) ? (
+                <button
+                  onClick={() => {
+                    resumeProject(previewItem);
+                    setPreviewItem(null);
+                  }}
+                  className="flex-grow bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-3 rounded-xl text-xs flex items-center justify-center gap-1.5 active:scale-95 transition-all shadow-lg shadow-indigo-600/10"
+                >
+                  <FolderOpen size={14} />
+                  {lang === 'ar' ? 'تعديل واستكمال العمل' : 'Resume / Edit'}
+                </button>
+              ) : (
+                <div className="flex-grow text-center py-3 text-[10px] text-slate-500 bg-white/5 rounded-xl border border-white/5 font-bold flex items-center justify-center">
+                  {lang === 'ar' ? 'هذا الإجراء غير قابل للتعديل' : 'This action cannot be re-edited'}
+                </div>
+              )}
+              <button
+                onClick={() => {
+                  deleteHistoryItem(previewItem.id);
+                  setPreviewItem(null);
+                }}
+                className="px-5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 font-bold py-3 rounded-xl text-xs active:scale-95 transition-all"
+              >
+                {lang === 'ar' ? 'حذف' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

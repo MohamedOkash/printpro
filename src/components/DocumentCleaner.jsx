@@ -10,8 +10,20 @@ import { FILTER_PRESETS } from '../constants'
 import { applySharpen, applyAdaptive, applyShadowRemoval, getAverageBrightness } from '../utils/imageProcessing'
 import { loadScript, CDN } from '../utils/scriptLoader'
 
+const dataURLtoBlob = (dataurl) => {
+  const arr = dataurl.split(',');
+  const mime = arr[0].match(/:(.*?);/)[1];
+  const bstr = atob(arr[1]);
+  let n = bstr.length;
+  const u8arr = new Uint8Array(n);
+  while (n--) {
+    u8arr[n] = bstr.charCodeAt(n);
+  }
+  return new Blob([u8arr], { type: mime });
+}
+
 export default function DocumentCleaner() {
-  const { t, lang, addHistoryItem } = useApp()
+  const { t, lang, addHistoryItem, sharedFiles, setSharedFiles, activeEditCleaner, setActiveEditCleaner } = useApp()
 
   const [pages, setPages]             = useState([]);
   const [activePage, setActivePage]   = useState(0);
@@ -19,8 +31,6 @@ export default function DocumentCleaner() {
   const [contrast,   setContrast]     = useState(100);
   const [grayscale,  setGrayscale]    = useState(0);
   const [invert,     setInvert]       = useState(false);
-  const [rotation,   setRotation]     = useState(0);
-  const [flipH,      setFlipH]        = useState(false);
   const [hdSharpen,  setHdSharpen]    = useState(false);
   const [adaptThresh,setAdaptThresh]  = useState(false);
   const [shadowFix,  setShadowFix]    = useState(false);
@@ -59,6 +69,292 @@ export default function DocumentCleaner() {
 
   const showToast = msg => { setToast(msg); setTimeout(()=>setToast(''),2500); };
 
+  const getPagesForHistory = async () => {
+    const pagesData = [];
+    for (const page of pages) {
+      try {
+        const base64 = await new Promise((resolve, reject) => {
+          const img = new Image();
+          img.onload = () => {
+            const canvas = document.createElement('canvas');
+            const MAX_SIZE = 1000;
+            let w = img.naturalWidth;
+            let h = img.naturalHeight;
+            if (w > MAX_SIZE || h > MAX_SIZE) {
+              if (w > h) {
+                h = Math.round((h * MAX_SIZE) / w);
+                w = MAX_SIZE;
+              } else {
+                w = Math.round((w * MAX_SIZE) / h);
+                h = MAX_SIZE;
+              }
+            }
+            canvas.width = w;
+            canvas.height = h;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(img, 0, 0, w, h);
+            resolve(canvas.toDataURL('image/jpeg', 0.8));
+          };
+          img.onerror = reject;
+          img.src = page.src;
+        });
+        pagesData.push({ name: page.name, base64 });
+      } catch (e) {
+        console.error("Error converting page to base64 for history", e);
+      }
+    }
+    return pagesData;
+  };
+
+  const loadFiles = async (fileList, append = false) => {
+    const validFiles = Array.from(fileList).filter(
+      f => f.type.startsWith('image/') || f.type === 'application/pdf' || f.name.toLowerCase().endsWith('.pdf')
+    );
+    if (!validFiles.length) return;
+
+    setIsBusy(true);
+    let newPages = [];
+
+    try {
+      for (const file of validFiles) {
+        if (file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf')) {
+          showToast(lang === 'ar' ? 'جاري استخراج صفحات الـ PDF...' : 'Extracting PDF pages...');
+          
+          const pdfjsLib = await loadScript(CDN.pdfJs || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js', 'pdfjsLib');
+          pdfjsLib.GlobalWorkerOptions.workerSrc = CDN.pdfJsWorker || 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+          
+          const arrayBuffer = await file.arrayBuffer();
+          const pdfDoc = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+          
+          for (let i = 1; i <= pdfDoc.numPages; i++) {
+            showToast(lang === 'ar' ? `جاري معالجة الصفحة ${i} من ${pdfDoc.numPages}...` : `Processing page ${i} of ${pdfDoc.numPages}...`);
+            const page = await pdfDoc.getPage(i);
+            const vp = page.getViewport({ scale: 3.0 });
+            const c = document.createElement('canvas');
+            c.width = vp.width;
+            c.height = vp.height;
+            const ctx = c.getContext('2d');
+            await page.render({ canvasContext: ctx, viewport: vp }).promise;
+            
+            const blob = await new Promise(resolve => c.toBlob(resolve, 'image/jpeg', 0.95));
+            newPages.push({
+              id: Date.now() + Math.random(),
+              src: URL.createObjectURL(blob),
+              name: `${file.name.replace(/\.pdf$/i, '')}_page_${i}.jpg`
+            });
+          }
+        } else {
+          newPages.push({
+            id: Date.now() + Math.random(),
+            src: URL.createObjectURL(file),
+            name: file.name
+          });
+        }
+      }
+
+      if (!newPages.length) {
+        setIsBusy(false);
+        return;
+      }
+
+      if (append) {
+        setPages(p => {
+          setActivePage(p.length);
+          return [...p, ...newPages];
+        });
+      } else {
+        pagesRef.current.forEach(p => {
+          if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src);
+        });
+        setPages(newPages);
+        setActivePage(0);
+      }
+      applyPreset(FILTER_PRESETS[0]);
+      setPanel('main');
+      setShowBA(false);
+      setActiveSection('crop');
+      showToast(lang === 'ar' ? 'تم تحميل الملفات بنجاح!' : 'Files loaded successfully!');
+    } catch (err) {
+      console.error(err);
+      showToast(lang === 'ar' ? 'خطأ في قراءة الملفات' : 'Error reading files');
+    } finally {
+      setIsBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    if (sharedFiles && sharedFiles.length > 0) {
+      loadFiles(sharedFiles, false);
+      setSharedFiles([]);
+    }
+  }, [sharedFiles, setSharedFiles]);
+
+  useEffect(() => {
+    if (activeEditCleaner) {
+      setIsBusy(true);
+      try {
+        const loadedPages = activeEditCleaner.pages.map(p => {
+          const blob = dataURLtoBlob(p.base64);
+          return {
+            id: Date.now() + Math.random(),
+            src: URL.createObjectURL(blob),
+            name: p.name
+          };
+        });
+        setPages(loadedPages);
+        setActivePage(0);
+        applyPreset(FILTER_PRESETS[0]);
+        setPanel('main');
+        setShowBA(false);
+        setActiveSection('crop');
+      } catch (err) {
+        console.error("Error loading project from history:", err);
+      } finally {
+        setIsBusy(false);
+        setActiveEditCleaner(null);
+      }
+    }
+  }, [activeEditCleaner, setActiveEditCleaner]);
+
+  useEffect(() => {
+    if (!cropHandle) return;
+
+    const handlePointerMove = (e) => {
+      if (!cropContRef.current) return;
+      const rect = cropContRef.current.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      const cy = e.clientY - rect.top;
+      const xp = Math.max(0, Math.min(100, (cx / rect.width) * 100));
+      const yp = Math.max(0, Math.min(100, (cy / rect.height) * 100));
+
+      setCropBox(prev => {
+        let nb = { ...prev };
+        
+        if (cropHandle === 'n') {
+          nb.y = Math.min(yp, prev.y + prev.h - 5);
+          nb.h = (prev.y + prev.h) - nb.y;
+        }
+        else if (cropHandle === 's') {
+          nb.h = Math.max(5, yp - prev.y);
+        }
+        else if (cropHandle === 'w') {
+          nb.x = Math.min(xp, prev.x + prev.w - 5);
+          nb.w = (prev.x + prev.w) - nb.x;
+        }
+        else if (cropHandle === 'e') {
+          nb.w = Math.max(5, xp - prev.x);
+        }
+        else if (cropHandle === 'nw') {
+          nb.x = Math.min(xp, prev.x + prev.w - 5);
+          nb.w = (prev.x + prev.w) - nb.x;
+          nb.y = Math.min(yp, prev.y + prev.h - 5);
+          nb.h = (prev.y + prev.h) - nb.y;
+        }
+        else if (cropHandle === 'ne') {
+          nb.w = Math.max(5, xp - prev.x);
+          nb.y = Math.min(yp, prev.y + prev.h - 5);
+          nb.h = (prev.y + prev.h) - nb.y;
+        }
+        else if (cropHandle === 'sw') {
+          nb.x = Math.min(xp, prev.x + prev.w - 5);
+          nb.w = (prev.x + prev.w) - nb.x;
+          nb.h = Math.max(5, yp - prev.y);
+        }
+        else if (cropHandle === 'se') {
+          nb.w = Math.max(5, xp - prev.x);
+          nb.h = Math.max(5, yp - prev.y);
+        }
+
+        if (forceA4) {
+          nb.w = nb.h / 1.414;
+          if (nb.x + nb.w > 100) nb.w = 100 - nb.x;
+        }
+        return nb;
+      });
+    };
+
+    const handlePointerUp = () => {
+      setCropHandle(null);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [cropHandle, forceA4]);
+
+  useEffect(() => {
+    if (!isDraggingBA) return;
+
+    const handlePointerMove = (e) => {
+      if (!baContRef.current) return;
+      const rect = baContRef.current.getBoundingClientRect();
+      const cx = e.clientX - rect.left;
+      setBaSplit(Math.max(3, Math.min(97, (cx / rect.width) * 100)));
+    };
+
+    const handlePointerUp = () => {
+      setIsDraggingBA(false);
+    };
+
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', handlePointerUp);
+    return () => {
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', handlePointerUp);
+    };
+  }, [isDraggingBA]);
+
+  const rotateImage90 = () => {
+    if (!currentSrc) return;
+    setIsBusy(true);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalHeight;
+      canvas.height = img.naturalWidth;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width / 2, canvas.height / 2);
+      ctx.rotate(90 * Math.PI / 180);
+      ctx.drawImage(img, -img.naturalWidth / 2, -img.naturalHeight / 2);
+      canvas.toBlob(blob => {
+        const newSrc = URL.createObjectURL(blob);
+        const oldSrc = pages[activePage]?.src;
+        if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+        setPages(pp => pp.map((p, i) => i === activePage ? { ...p, src: newSrc } : p));
+        setIsBusy(false);
+        showToast(lang === 'ar' ? 'تم التدوير ✓' : 'Rotated ✓');
+      }, 'image/jpeg', 0.95);
+    };
+    img.src = currentSrc;
+  };
+
+  const flipImageH = () => {
+    if (!currentSrc) return;
+    setIsBusy(true);
+    const img = new Image();
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      canvas.width = img.naturalWidth;
+      canvas.height = img.naturalHeight;
+      const ctx = canvas.getContext('2d');
+      ctx.translate(canvas.width, 0);
+      ctx.scale(-1, 1);
+      ctx.drawImage(img, 0, 0);
+      canvas.toBlob(blob => {
+        const newSrc = URL.createObjectURL(blob);
+        const oldSrc = pages[activePage]?.src;
+        if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc);
+        setPages(pp => pp.map((p, i) => i === activePage ? { ...p, src: newSrc } : p));
+        setIsBusy(false);
+        showToast(lang === 'ar' ? 'تم الانعكاس ✓' : 'Flipped ✓');
+      }, 'image/jpeg', 0.95);
+    };
+    img.src = currentSrc;
+  };
+
   // ── Apply filter preset ───────────────────────────────────────────────────
   const applyPreset = preset => {
     setActiveFilter(preset.id);
@@ -75,21 +371,15 @@ export default function DocumentCleaner() {
     const img = new Image();
     img.onload = () => {
       const MAX=2200; let w=img.naturalWidth, h=img.naturalHeight;
-      if (rotation%180!==0) [w,h]=[h,w];
       if (w>MAX){const r=MAX/w;w=MAX;h=Math.round(h*r);}
       canvas.width=w; canvas.height=h;
-      ctx.save(); ctx.translate(w/2,h/2); ctx.rotate(rotation*Math.PI/180);
-      if (flipH) ctx.scale(-1, 1);
-      ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
-      if(rotation%180!==0) ctx.drawImage(img,-h/2,-w/2,h,w);
-      else ctx.drawImage(img,-w/2,-h/2,w,h);
-      ctx.filter='none'; ctx.restore();
+      ctx.drawImage(img,0,0,w,h);
       if (adaptThresh) applyAdaptive(ctx,w,h);
       if (shadowFix) applyShadowRemoval(ctx,w,h);
       if (hdSharpen) applySharpen(ctx,w,h);
     };
     img.src = currentSrc;
-  }, [currentSrc,brightness,contrast,grayscale,invert,rotation,flipH,panel,adaptThresh,hdSharpen,shadowFix]);
+  }, [currentSrc,panel,adaptThresh,hdSharpen,shadowFix]);
 
   // ── Original for Before/After ─────────────────────────────────────────────
   useEffect(() => {
@@ -118,24 +408,8 @@ export default function DocumentCleaner() {
 
   // ── Upload ────────────────────────────────────────────────────────────────
   const onUpload = (e, append=false) => {
-    const files = Array.from(e.target.files).filter(f=>f.type.startsWith('image/'));
-    if (!files.length) return;
-    const newPages = files.map(f=>({id:Date.now()+Math.random(),src:URL.createObjectURL(f),name:f.name}));
-    if (append) {
-      setPages(p=>[...p,...newPages]);
-      setActivePage(pages.length);
-    } else {
-      pages.forEach(p => {
-        if (p.src && p.src.startsWith('blob:')) URL.revokeObjectURL(p.src)
-      })
-      setPages(newPages);
-      setActivePage(0);
-    }
-    applyPreset(FILTER_PRESETS[0]);
-    setPanel('main');
-    setShowBA(false);
+    loadFiles(e.target.files, append);
     e.target.value='';
-    setActiveSection('crop'); // Automatically go to crop/adjust tab
   };
 
   // ── Camera ────────────────────────────────────────────────────────────────
@@ -361,14 +635,21 @@ export default function DocumentCleaner() {
   };
 
   // ── Save image ────────────────────────────────────────────────────────────
-  const saveImage = () => {
+  const saveImage = async () => {
     if (!canvasRef.current) return; setIsBusy(true);
+    const pagesData = await getPagesForHistory();
     requestAnimationFrame(()=>{
       const c=buildFinal();
       c.toBlob(blob=>{
         const url=URL.createObjectURL(blob);
         const a=document.createElement('a'); a.download='PrintPro_doc.jpg'; a.href=url; a.click(); URL.revokeObjectURL(url);
-        addHistoryItem({type:'image',name:pages[activePage]?.name||'مستند',filter:activeFilter,thumb:c.toDataURL('image/jpeg',.1)});
+        addHistoryItem({
+          type:'image',
+          name:pages[activePage]?.name||(lang === 'ar' ? 'مستند' : 'Document'),
+          filter:activeFilter,
+          thumb:c.toDataURL('image/jpeg',.1),
+          projectData: { pages: pagesData }
+        });
         showToast(t('savedToHistory')); setIsBusy(false);
       },'image/jpeg',1.0);
     });
@@ -377,6 +658,7 @@ export default function DocumentCleaner() {
   // ── Save PDF (multi-page) ─────────────────────────────────────────────────
   const savePDF = async () => {
     if (!pages.length) return; setIsBusy(true);
+    const pagesData = await getPagesForHistory();
     try {
       const {jsPDF}=await loadScript('https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js','jspdf');
       let pdf=null;
@@ -385,28 +667,21 @@ export default function DocumentCleaner() {
           const img=new Image();
           img.onload=()=>{
             const MAX=2200; let w=img.naturalWidth,h=img.naturalHeight;
-            let drawW = w, drawH = h;
-            if (idx===activePage && rotation%180!==0) [drawW, drawH] = [h, w];
-            if(drawW>MAX){const r=MAX/drawW;drawW=MAX;drawH=Math.round(drawH*r);}
-            const c=document.createElement('canvas'); c.width=drawW; c.height=drawH;
+            if(w>MAX){const r=MAX/w;w=MAX;h=Math.round(h*r);}
+            const c=document.createElement('canvas'); c.width=w; c.height=h;
             const ctx=c.getContext('2d');
+            
             if(idx===activePage) {
-              ctx.save();
-              ctx.translate(drawW/2, drawH/2);
-              ctx.rotate(rotation*Math.PI/180);
-              if (flipH) ctx.scale(-1, 1);
               ctx.filter=`invert(${invert?100:0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`;
-              if(rotation%180!==0) ctx.drawImage(img,-drawH/2,-drawW/2,drawH,drawW);
-              else ctx.drawImage(img,-drawW/2,-drawH/2,drawW,drawH);
-              ctx.restore();
+              ctx.drawImage(img,0,0,w,h);
+              ctx.filter='none';
+              if(adaptThresh) applyAdaptive(ctx,w,h);
+              if(shadowFix) applyShadowRemoval(ctx,w,h);
+              if(hdSharpen) applySharpen(ctx,w,h);
             } else {
-              ctx.drawImage(img,0,0,drawW,drawH);
+              ctx.drawImage(img,0,0,w,h);
             }
-            ctx.filter='none';
-            if(idx===activePage&&adaptThresh) applyAdaptive(ctx,drawW,drawH);
-            if(idx===activePage&&shadowFix) applyShadowRemoval(ctx,drawW,drawH);
-            if(idx===activePage&&hdSharpen) applySharpen(ctx,drawW,drawH);
-            res({data:c.toDataURL('image/jpeg',.9),w:drawW,h:drawH});
+            res({data:c.toDataURL('image/jpeg',.9),w,h});
           };
           img.src=pages[idx].src;
         });
@@ -415,7 +690,12 @@ export default function DocumentCleaner() {
         pdf.addImage(imgData.data,'JPEG',0,0,imgData.w,imgData.h);
       }
       pdf.save('PrintPro_Document.pdf');
-      addHistoryItem({type:'pdf',name:`${pages.length} صفحة`,thumb:null});
+      addHistoryItem({
+        type:'pdf',
+        name:lang === 'ar' ? `${pages.length} صفحة` : `${pages.length} page(s)`,
+        thumb:null,
+        projectData: { pages: pagesData }
+      });
       showToast(lang === 'ar' ? 'تم حفظ PDF بنجاح! ✓' : 'PDF saved successfully! ✓');
     } catch(e){console.error(e);}
     setIsBusy(false);
@@ -460,7 +740,9 @@ export default function DocumentCleaner() {
         className={`flex-shrink-0 flex flex-col items-center gap-1.5 p-2 rounded-2xl border transition-all
           ${active?'border-indigo-500 bg-indigo-500/15 shadow-[0_0_10px_rgba(99,102,241,.3)]':'border-white/5 bg-white/5 hover:border-white/15'}`}>
         <canvas ref={ref} style={{width:48,height:60,borderRadius:8,display:'block'}}/>
-        <span className={`text-[9px] font-bold whitespace-nowrap ${active?'text-indigo-300':'text-slate-500'}`}>{preset.label}</span>
+        <span className={`text-[9px] font-bold whitespace-nowrap ${active?'text-indigo-300':'text-slate-500'}`}>
+          {lang === 'ar' ? preset.label : preset.labelEn}
+        </span>
       </button>
     );
   };
@@ -503,10 +785,7 @@ export default function DocumentCleaner() {
   };
 
   return (
-    <div className="flex flex-col md:flex-row h-full overflow-hidden"
-      onPointerUp={() => { setCropHandle(null); setIsDraggingBA(false); }}
-      onPointerLeave={() => { setCropHandle(null); setIsDraggingBA(false); }}
-      onPointerMove={e => { onCropMove(e); if (isDraggingBA) onBAMove(e); }}>
+    <div className="flex flex-col md:flex-row h-full overflow-hidden">
 
       {/* ── Preview (Top 45% on mobile, flex-1 on desktop) ── */}
       <div className="h-[42vh] md:h-full flex-shrink-0 md:flex-1 bg-[#0a0a0d] flex flex-col items-center justify-center overflow-hidden relative p-3 md:p-6 touch-none">
@@ -531,7 +810,7 @@ export default function DocumentCleaner() {
 
         {!currentSrc?(
           <label className="flex flex-col items-center justify-center w-full max-w-sm border-2 border-dashed border-white/10 rounded-3xl p-8 cursor-pointer hover:bg-white/[.02] transition-colors group">
-            <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onUpload}/>
+            <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={onUpload}/>
             <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:bg-indigo-500/10 transition-colors">
               <Upload size={22} className="text-slate-500 group-hover:text-indigo-400 transition-colors"/>
             </div>
@@ -543,7 +822,7 @@ export default function DocumentCleaner() {
             {panel==='crop'?(
               <div ref={cropContRef} className="relative inline-block" style={{ touchAction: 'none' }}>
                 <img ref={cropImgRef} src={currentSrc} alt="crop"
-                  className="max-w-full max-h-[35vh] md:max-h-[80vh] object-contain block pointer-events-none" draggable={false}/>
+                  className="max-w-full max-h-[35vh] md:max-h-[80vh] block pointer-events-none" draggable={false}/>
                 {[
                   {style:{top:0,left:0,right:0,height:`${cropBox.y}%`}},
                   {style:{bottom:0,left:0,right:0,height:`${100-cropBox.y-cropBox.h}%`}},
@@ -569,16 +848,7 @@ export default function DocumentCleaner() {
                       onPointerDown={e => {
                         e.preventDefault();
                         e.stopPropagation();
-                        e.currentTarget.setPointerCapture(e.pointerId);
                         setCropHandle(h);
-                      }}
-                      onPointerUp={e => {
-                        e.currentTarget.releasePointerCapture(e.pointerId);
-                        setCropHandle(null);
-                      }}
-                      onPointerCancel={e => {
-                        e.currentTarget.releasePointerCapture(e.pointerId);
-                        setCropHandle(null);
                       }}
                     >
                       <div className={`w-3.5 h-3.5 bg-white border-2 border-emerald-500 shadow-md ${
@@ -595,20 +865,15 @@ export default function DocumentCleaner() {
                 onPointerDown={e => {
                   e.preventDefault();
                   e.stopPropagation();
-                  e.currentTarget.setPointerCapture(e.pointerId);
                   setIsDraggingBA(true);
-                }}
-                onPointerUp={e => {
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                  setIsDraggingBA(false);
-                }}
-                onPointerCancel={e => {
-                  e.currentTarget.releasePointerCapture(e.pointerId);
-                  setIsDraggingBA(false);
                 }}
               >
                 {/* Processed */}
-                <canvas ref={canvasRef} className="block max-w-full max-h-[35vh] md:max-h-[80vh] rounded-xl shadow-2xl"/>
+                <canvas ref={canvasRef} className="block max-w-full max-h-[35vh] md:max-h-[80vh] rounded-xl shadow-2xl"
+                  style={{
+                    filter: `invert(${invert ? 100 : 0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`
+                  }}
+                />
                 {/* Original */}
                 <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none" style={{clipPath:`inset(0 ${100-baSplit}% 0 0)`}}>
                   <canvas ref={origCanvasRef} style={{width:'100%',height:'100%',display:'block'}}/>
@@ -623,7 +888,11 @@ export default function DocumentCleaner() {
               </div>
             ) : (
               <div className="relative">
-                <canvas ref={canvasRef} className="max-w-full max-h-[35vh] md:max-h-[80vh] object-contain block rounded-xl shadow-2xl"/>
+                <canvas ref={canvasRef} className="max-w-full max-h-[35vh] md:max-h-[80vh] object-contain block rounded-xl shadow-2xl"
+                  style={{
+                    filter: `invert(${invert ? 100 : 0}%) brightness(${brightness}%) contrast(${contrast}%) grayscale(${grayscale}%)`
+                  }}
+                />
                 {wmText&&(
                   <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden rounded-xl" style={{opacity:wmOpacity/100}}>
                     <div className="text-black font-black text-2xl md:text-5xl -rotate-45 opacity-60 whitespace-nowrap">{wmText}</div>
@@ -692,10 +961,10 @@ export default function DocumentCleaner() {
                 <button onClick={detectSmartCrop} className="py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white text-[10px] font-black rounded-xl flex items-center justify-center gap-1 transition-colors">
                   <Wand2 size={12}/>{lang==='ar'?'القص الذكي':'Smart Crop'}
                 </button>
-                <button onClick={()=>setRotation(r=>(r+90)%360)} className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1 transition-colors">
+                <button onClick={rotateImage90} className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1 transition-colors">
                   <RotateCw size={12}/>{lang==='ar'?'تدوير 90°':'Rotate 90°'}
                 </button>
-                <button onClick={()=>setFlipH(f=>!f)} className={`py-2.5 border rounded-xl text-[10px] font-bold flex items-center justify-center gap-1 transition-colors ${flipH ? 'bg-indigo-500/20 border-indigo-500/30 text-indigo-300' : 'bg-white/5 border-white/5 text-slate-300 hover:bg-white/10'}`}>
+                <button onClick={flipImageH} className="py-2.5 bg-white/5 hover:bg-white/10 border border-white/5 rounded-xl text-[10px] font-bold text-slate-300 flex items-center justify-center gap-1 transition-colors">
                   <Sliders size={12}/>{lang==='ar'?'عكس أفقي':'Mirror H'}
                 </button>
               </div>
@@ -740,7 +1009,17 @@ export default function DocumentCleaner() {
                       <span className={`flex items-center gap-1.5 ${c}`}><Icon size={12}/>{label}</span>
                       <span className="text-slate-500">{val}%</span>
                     </div>
-                    <input type="range" min={min} max={max} value={val} onChange={e=>set(Number(e.target.value))} onPointerDown={e => e.stopPropagation()} className="w-full h-1.5 accent-indigo-500"/>
+                    <input 
+                      type="range" 
+                      min={min} 
+                      max={max} 
+                      value={val} 
+                      onChange={e=>set(Number(e.target.value))} 
+                      onPointerDown={e => e.stopPropagation()} 
+                      onPointerMove={e => e.stopPropagation()}
+                      onPointerUp={e => e.stopPropagation()}
+                      className="w-full h-1.5 accent-indigo-500 touch-none"
+                    />
                   </div>
                 ))}
               </div>
@@ -820,7 +1099,17 @@ export default function DocumentCleaner() {
                 {wmText && (
                   <div className="flex items-center gap-3">
                     <span className="text-[11px] text-slate-500 font-bold whitespace-nowrap">{t('opacity')}</span>
-                    <input type="range" min={5} max={100} value={wmOpacity} onChange={e=>setWmOpacity(Number(e.target.value))} onPointerDown={e => e.stopPropagation()} className="flex-1 h-1.5 accent-pink-500"/>
+                    <input 
+                      type="range" 
+                      min={5} 
+                      max={100} 
+                      value={wmOpacity} 
+                      onChange={e=>setWmOpacity(Number(e.target.value))} 
+                      onPointerDown={e => e.stopPropagation()} 
+                      onPointerMove={e => e.stopPropagation()}
+                      onPointerUp={e => e.stopPropagation()}
+                      className="flex-1 h-1.5 accent-pink-500 touch-none"
+                    />
                     <span className="text-xs text-pink-400 font-bold w-8 text-center">{wmOpacity}%</span>
                   </div>
                 )}
@@ -831,8 +1120,8 @@ export default function DocumentCleaner() {
         </div>
 
         {/* Static input refs */}
-        <input ref={fileRef} type="file" accept="image/*" multiple className="hidden" onChange={onUpload}/>
-        <input ref={addPageRef} type="file" accept="image/*" multiple className="hidden" onChange={e=>onUpload(e,true)}/>
+        <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={onUpload}/>
+        <input ref={addPageRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={e=>onUpload(e,true)}/>
       </div>
     </div>
   );
