@@ -27,11 +27,15 @@ export default function FileConverter() {
 
   // Accordion active section ('task' | 'upload' | 'options')
   const [activeSection, setActiveSection] = useState('task')
+  const [errorMsg, setErrorMsg] = useState('')
+  const [isBusy, setIsBusy] = useState(false)
+
 
   const fileRef = useRef(null)
   const addRef = useRef(null)
 
   const onFiles = (e, append = false) => {
+    setErrorMsg('')
     const arr = Array.from(e.target.files); if (!arr.length) return;
     if (append) {
       setFiles(p => [...p, ...arr])
@@ -59,6 +63,7 @@ export default function FileConverter() {
   }
 
   const selectMode = (newMode) => {
+    setErrorMsg('')
     setMode(newMode)
     setFiles([])
     setState('idle')
@@ -68,6 +73,7 @@ export default function FileConverter() {
   }
 
   const startTask = async () => {
+    setErrorMsg('')
     if (!files.length) return;
     setState('processing')
     setProgress('')
@@ -354,10 +360,15 @@ export default function FileConverter() {
           setTimeout(() => setState('idle'), 2000)
         }
       }
-    } catch (err) {
-      console.error(err)
-      setProgress(lang === 'ar' ? 'حدث خطأ. تحقق من الملف وحاول مجدداً.' : 'An error occurred. Check file and try again.')
-      setState('error')
+    } catch (e) {
+      console.error(e)
+      const msg = lang === 'ar'
+        ? 'حدث خطأ أثناء المعالجة. تأكد من صحة الملف وحجمه وحاول مرة أخرى.'
+        : 'An error occurred. Please check the file and try again.'
+      setErrorMsg(msg)
+      setState('idle')
+    } finally {
+      setIsBusy(false)
     }
   }
 
@@ -783,6 +794,24 @@ export default function FileConverter() {
                 {progress}
               </p>
             )}
+          </div>
+        )}
+
+        {errorMsg && (
+          <div className="flex items-center gap-3 bg-red-500/10 border border-red-500/20 rounded-2xl p-4 mt-4 w-full">
+            <AlertTriangle size={18} className="text-red-400 flex-shrink-0" />
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-red-400">
+                {lang === 'ar' ? 'فشلت العملية' : 'Operation failed'}
+              </p>
+              <p className="text-xs text-red-300/70 mt-0.5">{errorMsg}</p>
+            </div>
+            <button
+              onClick={() => setErrorMsg('')}
+              className="text-red-400 hover:text-red-300 transition-colors flex-shrink-0"
+            >
+              <X size={16} />
+            </button>
           </div>
         )}
 
