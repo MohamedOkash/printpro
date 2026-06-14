@@ -41,13 +41,4 @@ export const FRAMES = [
   { id:'stars-border',    name:'إطار النجوم',       nameEn:'Stars Border' },
 ]
 
-// ─── History type config ──────────────────────────────────────────────────────
-export const TYPE_CFG = {
-  image:  { label:'صورة',       c:'emerald' },
-  pdf:    { label:'PDF',         c:'rose'    },
-  cover:  { label:'غلاف',       c:'purple'  },
-  merge:  { label:'دمج',         c:'indigo'  },
-  split:  { label:'تقسيم',      c:'sky'     },
-  edit:   { label:'تحرير PDF',  c:'orange'  },
-  convert:{ label:'تحويل',      c:'amber'   },
-}
+

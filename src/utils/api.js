@@ -78,7 +78,7 @@ const generateFallbackResponse = (prompt) => {
   }
 }
 
-export const callClaudeAPI = async (prompt) => {
+export const callGeminiAPI = async (prompt) => {
   const apiKey = import.meta.env.VITE_GEMINI_API_KEY
   if (!apiKey) {
     console.warn('VITE_GEMINI_API_KEY is not defined, using offline fallback.')

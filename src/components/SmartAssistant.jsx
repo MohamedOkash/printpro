@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react'
 import { Sparkles, Upload, FileText, Bot, Loader2, ArrowRight, CornerDownLeft } from 'lucide-react'
 import { useApp } from '../context/AppContext'
-import { callClaudeAPI } from '../utils/api'
+import { callGeminiAPI } from '../utils/api'
 
 export default function SmartAssistant({ onNavigate }) {
   const { t, lang, setSharedFiles } = useApp()
@@ -153,7 +153,7 @@ Respond STRICTLY in JSON format with no other text:
       let classification = null
       const apiKey = import.meta.env.VITE_GEMINI_API_KEY
       if (apiKey) {
-        classification = await callClaudeAPI(prompt)
+        classification = await callGeminiAPI(prompt)
       }
 
       if (!classification || !classification.tab) {

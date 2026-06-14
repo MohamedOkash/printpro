@@ -7,7 +7,7 @@ import {
 import { useApp } from '../context/AppContext'
 import { FONTS, STICKERS, FRAMES } from '../constants'
 import { loadScript, CDN } from '../utils/scriptLoader'
-import { callClaudeAPI } from '../utils/api'
+import { callGeminiAPI } from '../utils/api'
 import CoverFrame from './CoverFrame'
 
 const getBackgroundPrompt = (subject) => {
@@ -238,7 +238,7 @@ export default function CoverDesigner() {
         ? `أنت مصمم أغلفة مذكرات تعليمية. المادة: ${aiForm.subject}, الصف: ${aiForm.grade || 'غير محدد'}, المعلم: ${aiForm.teacher || 'غير محدد'}. أعد JSON فقط بلا أي نص إضافي: {"title":"عنوان جذاب","subtitle":"تفاصيل الصف","author":"إعداد المعلم: [الاسم]"}`
         : `You are an educational book cover designer. Subject: ${aiForm.subject}, Grade: ${aiForm.grade || 'unspecified'}, Teacher: ${aiForm.teacher || 'unspecified'}. Return JSON only with no other text: {"title":"Attractive Title","subtitle":"Grade Details","author":"Prepared by Teacher: [Name]"}`;
       
-      const r = await callClaudeAPI(prompt)
+      const r = await callGeminiAPI(prompt)
       if (r) {
         setElements(p => p.map(e => {
           if (e.id === 't1' && r.title) return { ...e, text: r.title };
