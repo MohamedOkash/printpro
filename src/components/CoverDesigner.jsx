@@ -488,14 +488,14 @@ export default function CoverDesigner() {
         
         <div className="flex-1 sc overflow-y-auto">
           <div className="sticky top-0 z-20 bg-[#131317] border-b border-white/5 px-3 py-3 backdrop-blur-xl">
-            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+            <div className="flex flex-wrap gap-1">
               {sectionCards.map(({ id, label, icon: Icon }) => {
                 const active = activeSection === id
                 return (
                   <button key={id}
                     type="button"
                     onClick={() => setActiveSection(active ? '' : id)}
-                    className={`flex-shrink-0 min-w-[84px] h-12 rounded-2xl border px-3 text-[11px] font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${active ? 'bg-white/10 border-white/20 text-white shadow-[0_10px_30px_-18px_rgba(255,255,255,0.8)]' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'}`}
+                    className={`min-w-[84px] h-12 rounded-2xl border px-3 text-[11px] font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${active ? 'bg-white/10 border-white/20 text-white shadow-[0_10px_30px_-18px_rgba(255,255,255,0.8)]' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'}`}
                   >
                     <Icon size={18} />
                     <span>{label}</span>
@@ -662,12 +662,12 @@ export default function CoverDesigner() {
                 <div className="space-y-4">
                   <div>
                     <p className="text-xs font-bold text-slate-400 mb-2">{lang === 'ar' ? 'خط العنوان العام:' : 'Global Font family:'}</p>
-                    <div className="flex nx gap-2 pb-1">
+                    <div className="flex flex-wrap gap-2">
                       {FONTS.map(f => (
                         <button
                           key={f}
                           onClick={() => setDesign(p => ({ ...p, fontFamily: f }))}
-                          className={`flex-shrink-0 px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
+                          className={`px-3 py-2 rounded-xl text-xs font-bold whitespace-nowrap transition-all border ${
                              design.fontFamily === f
                               ? 'bg-indigo-600 text-white border-indigo-600'
                               : 'bg-white/5 text-slate-400 border-white/5 hover:border-white/20'

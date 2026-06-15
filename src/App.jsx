@@ -166,7 +166,7 @@ export default function App() {
         </main>
 
         {/* Mobile bottom nav */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-panel rounded-none flex items-center justify-between px-0 py-0 gap-0 z-50 h-14 border-t border-white/5">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 glass-panel rounded-none flex items-center justify-between px-0 py-0 gap-0 z-50 h-12 border-t border-white/5 pb-[env(safe-area-inset-bottom)]">
           {TABS.map(({ id, icon: Icon, labelKey, c }) => (
             <motion.button
               key={id}
@@ -175,7 +175,7 @@ export default function App() {
               className={`relative flex-1 h-full flex items-center justify-center transition-all border-r border-white/5 last:border-r-0
                 ${tab === id ? TAB_MOBILE_ACTIVE_TEXT[c] : 'text-slate-500'}`}
             >
-              <Icon size={20} />
+              <Icon size={18} />
               {tab === id && (
                 <motion.span layoutId="mobile-active" className="absolute -top-2 left-1/2 -translate-x-1/2 w-10 h-1.5 rounded-full bg-indigo-400/80" />
               )}

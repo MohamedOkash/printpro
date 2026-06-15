@@ -40,7 +40,10 @@ export function useCamera({
     c.getContext('2d').drawImage(v, 0, 0)
     c.toBlob(blob => {
       if (setPages) {
-        setPages([{ id: Date.now(), src: URL.createObjectURL(blob), name: 'camera.jpg' }])
+        setPages(prev => {
+          prev.forEach(p => { if (p.src?.startsWith('blob:')) URL.revokeObjectURL(p.src) })
+          return [{ id: Date.now(), src: URL.createObjectURL(blob), name: 'camera.jpg' }]
+        })
       }
       if (setActivePage) setActivePage(0)
       if (applyPreset) applyPreset(FILTER_PRESETS[0])

@@ -111,10 +111,10 @@ const ScannerPreview = ({ store }) => {
           )}
 
           {pages.length > 1 && (
-            <div className="flex gap-2 mt-3 nx max-w-full pb-1">
+            <div className="flex flex-wrap justify-center gap-2 mt-3 max-w-full pb-1">
               {pages.map((p, i) => (
-                <button key={p.id} onClick={() => { setActivePage(i); applyPreset(FILTER_PRESETS[0]); setShowBA(false); }}
-                  className={`flex-shrink-0 w-11 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === activePage ? 'border-indigo-500 shadow-[0_0_8px_rgba(99,102,241,.4)]' : 'border-white/10'}`}>
+                <button key={p.id} onClick={() => { setActivePage(i); setShowBA(false); }}
+                  className={`w-11 h-14 rounded-lg overflow-hidden border-2 transition-all ${i === activePage ? 'border-indigo-500 shadow-[0_0_8px_rgba(99,102,241,.4)]' : 'border-white/10'}`}>
                   <img src={p.src} alt="" className="w-full h-full object-cover" />
                 </button>
               ))}

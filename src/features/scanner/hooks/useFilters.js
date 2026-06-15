@@ -71,8 +71,12 @@ export function useFilters({ canvasRef, currentSrc, panel, showToast, lang }) {
     if (!canvas) return
     const ctx = canvas.getContext('2d', { willReadFrequently: true })
     canvas.style.filter = 'none'
+
+    let cancelled = false
+
     const img = new Image()
     img.onload = () => {
+      if (cancelled) return
       const { w, h } = resizeToMax(img.naturalWidth, img.naturalHeight, 2200)
       canvas.width = w
       canvas.height = h
@@ -83,6 +87,10 @@ export function useFilters({ canvasRef, currentSrc, panel, showToast, lang }) {
       if (hdSharpen) applySharpen(ctx, w, h)
     }
     img.src = currentSrc
+
+    return () => {
+      cancelled = true
+    }
   }, [currentSrc, panel, brightness, contrast, grayscale, invert, adaptThresh, hdSharpen, shadowFix, canvasRef])
 
   return {

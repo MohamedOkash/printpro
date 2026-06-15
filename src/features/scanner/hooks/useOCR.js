@@ -91,6 +91,29 @@ export function useOCR({ canvasRef, showToast, lang, t }) {
     })
   }, [canvasRef, t, lang])
 
+  const recognizeImage = useCallback(async (dataUrl) => {
+    const id = ++jobIdCounter
+    return new Promise((resolve, reject) => {
+      pendingRef.current.set(id, {
+        setProgress: () => {},
+        resolve: text => {
+          pendingRef.current.delete(id)
+          resolve(text?.trim() || '')
+        },
+        reject: err => {
+          pendingRef.current.delete(id)
+          reject(err)
+        },
+      })
+      if (workerRef.current) {
+        workerRef.current.postMessage({ type: 'recognize', id, dataUrl, lang: 'ara+eng' })
+      } else {
+        pendingRef.current.delete(id)
+        reject(new Error('Worker not initialized'))
+      }
+    })
+  }, [])
+
   return {
     ocrText,
     setOcrText,
@@ -99,5 +122,6 @@ export function useOCR({ canvasRef, showToast, lang, t }) {
     isOcr,
     setIsOcr,
     runOCR,
+    recognizeImage,
   }
 }

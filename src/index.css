@@ -21,6 +21,8 @@
   --radius-lg: 24px;
   --transition-fast: 180ms;
   --transition-base: 220ms;
+  --sat: env(safe-area-inset-top);
+  --sab: env(safe-area-inset-bottom);
 }
 
 * { box-sizing: border-box; }
@@ -119,8 +121,8 @@ button {
 .sc::-webkit-scrollbar-track { background: transparent; }
 .sc::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
 
-/* Hide scrollbar but allow scroll */
-.nx { -ms-overflow-style: none; scrollbar-width: none; overflow-x: auto; }
+/* Hide scrollbar */
+.nx { -ms-overflow-style: none; scrollbar-width: none; }
 .nx::-webkit-scrollbar { display: none; }
 
 input[type=range] { accent-color: #6366f1; }
@@ -156,44 +158,9 @@ input, textarea, [contenteditable] {
   font-size: 16px;
 }
 
-/* Scrollbar */
-.sc { overflow-y: auto; }
-.sc::-webkit-scrollbar { width: 4px; }
-.sc::-webkit-scrollbar-track { background: transparent; }
-.sc::-webkit-scrollbar-thumb { background: rgba(255,255,255,.12); border-radius: 8px; }
-
-/* Hide scrollbar but allow scroll */
-.nx { -ms-overflow-style: none; scrollbar-width: none; overflow-x: auto; }
-.nx::-webkit-scrollbar { display: none; }
-
 /* Animations */
 @keyframes fu {
   from { opacity: 0; transform: translateY(10px); }
   to   { opacity: 1; transform: translateY(0); }
 }
 .fu { animation: fu .2s ease both; }
-
-/* Range inputs */
-input[type=range] { accent-color: #6366f1; }
-input[type=color]  { border: none; padding: 0; background: transparent; cursor: pointer; width: 100%; height: 100%; }
-
-/* Safe area */
-:root {
-  --sat: env(safe-area-inset-top);
-  --sab: env(safe-area-inset-bottom);
-}
-
-/* Print styles */
-@media print {
-  body * { visibility: hidden; }
-  #cover-print, #cover-print * { visibility: visible; }
-  #cover-print {
-    position: absolute !important;
-    left: 0 !important; top: 0 !important;
-    width: 210mm !important; height: 297mm !important;
-    margin: 0 !important;
-    -webkit-print-color-adjust: exact !important;
-    print-color-adjust: exact !important;
-  }
-  @page { size: A4; margin: 0; }
-}

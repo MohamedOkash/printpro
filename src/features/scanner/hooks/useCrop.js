@@ -175,6 +175,31 @@ export function useCrop({
       } catch (e) {
         console.warn('Perspective correction failed, proceeding without it', e)
       }
+
+      // fallback: compute crop box from detected corners when correction fails silently
+      const [tl, tr, br, bl] = corners
+      const minX = Math.min(tl.x, tr.x, br.x, bl.x)
+      const maxX = Math.max(tl.x, tr.x, br.x, bl.x)
+      const minY = Math.min(tl.y, tr.y, br.y, bl.y)
+      const maxY = Math.max(tl.y, tr.y, br.y, bl.y)
+      const padX = Math.round(imageWidth * 0.015)
+      const padY = Math.round(imageHeight * 0.015)
+      const x1 = Math.max(0, minX - padX)
+      const y1 = Math.max(0, minY - padY)
+      const x2 = Math.min(imageWidth, maxX + padX)
+      const y2 = Math.min(imageHeight, maxY + padY)
+      setCropBox({
+        x: Math.max(0, Math.min(80, Math.round((x1 / imageWidth) * 100))),
+        y: Math.max(0, Math.min(80, Math.round((y1 / imageHeight) * 100))),
+        w: Math.min(100 - Math.round((x1 / imageWidth) * 100), Math.max(20, Math.round(((x2 - x1) / imageWidth) * 100))),
+        h: Math.min(100 - Math.round((y1 / imageHeight) * 100), Math.max(20, Math.round(((y2 - y1) / imageHeight) * 100))),
+      })
+      showToast(lang === 'ar' ? 'تم تحديد حواف المستند! ✓' : 'Document edges detected! ✓')
+      setPanel('crop')
+      setCropMode(true)
+      setShowBA(false)
+      setIsBusy(false)
+      return
     } catch (err) {
       console.warn('OpenCV detection failed, falling back to Sobel:', err)
       const img = new Image()

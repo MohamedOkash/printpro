@@ -1,5 +1,4 @@
 import { loadOpenCV } from './opencvLoader'
-import { enhancementPipeline } from './enhancementPipeline'
 
 function orderPoints(pts) {
   const rect = []
@@ -87,20 +86,11 @@ export async function correctPerspective(dataUrl, corners) {
   const dsize = new cv.Size(maxWidth, maxHeight)
   cv.warpPerspective(src, dst, M, dsize, cv.INTER_LINEAR, cv.BORDER_CONSTANT, new cv.Scalar())
 
-  // apply enhancement pipeline (OCR-optimized)
-  let processed = null
-  try {
-    processed = await enhancementPipeline(cv, dst, { adaptiveThreshold: false, ocrOptimized: true })
-  } catch (e) {
-    console.warn('Enhancement pipeline failed, using warped result', e)
-    processed = dst.clone()
-  }
-
-  // draw to canvas
+  // draw warped result to canvas
   const canvas = document.createElement('canvas')
   canvas.width = maxWidth
   canvas.height = maxHeight
-  cv.imshow(canvas, processed)
+  cv.imshow(canvas, dst)
 
   const dataUrlOut = canvas.toDataURL('image/jpeg', 0.95)
 
@@ -110,7 +100,6 @@ export async function correctPerspective(dataUrl, corners) {
   srcPts.delete()
   dstPts.delete()
   M.delete()
-  if (processed) processed.delete()
 
   return {
     correctedImage: dataUrlOut,

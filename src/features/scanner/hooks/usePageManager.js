@@ -119,7 +119,11 @@ export function usePageManager({
   }, [])
 
   const replacePage = useCallback((pageIndex, newSrc, newName) => {
-    setPages(pp => pp.map((p, i) => i === pageIndex ? { ...p, src: newSrc, name: newName || p.name } : p))
+    setPages(pp => {
+      const old = pp[pageIndex]
+      if (old?.src && old.src.startsWith('blob:') && old.src !== newSrc) URL.revokeObjectURL(old.src)
+      return pp.map((p, i) => i === pageIndex ? { ...p, src: newSrc, name: newName || p.name } : p)
+    })
   }, [])
 
   const rotateImage90 = useCallback(() => {
