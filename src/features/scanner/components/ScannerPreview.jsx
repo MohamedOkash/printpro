@@ -14,7 +14,7 @@ const ScannerPreview = ({ store }) => {
   } = store
 
   return (
-    <div className="h-[42vh] md:h-full flex-shrink-0 md:flex-1 bg-[#0a0a0d] flex flex-col items-center justify-center overflow-hidden relative p-3 md:p-6 touch-none">
+    <div className="flex-1 min-h-0 bg-[#0a0a0d] flex flex-col items-center justify-center overflow-hidden relative p-3 md:p-6 touch-none">
       {currentSrc && (
         <div className="absolute top-3 left-3 flex gap-1.5 z-20">
           <button onClick={handleUndo} disabled={!undoStackRef.current.length}
@@ -38,7 +38,7 @@ const ScannerPreview = ({ store }) => {
               className="w-16 h-16 rounded-full bg-white border-4 border-indigo-500 shadow-[0_0_20px_rgba(99,102,241,.5)] active:scale-90 transition-transform" />
             <button onClick={closeCamera}
               className="w-12 h-12 rounded-full bg-red-600 flex items-center justify-center">
-              <X size={20} className="text-white" />
+              <X size={16} className="text-white" />
             </button>
           </div>
         </div>
@@ -51,10 +51,10 @@ const ScannerPreview = ({ store }) => {
       )}
 
       {!currentSrc ? (
-        <label className="flex flex-col items-center justify-center w-full max-w-sm border-2 border-dashed border-white/10 rounded-3xl p-8 cursor-pointer hover:bg-white/[.02] transition-colors group">
+        <label className="flex flex-col items-center justify-center w-full h-full min-h-[45vh] max-w-sm border-2 border-dashed border-white/10 rounded-3xl p-8 cursor-pointer hover:bg-white/[.02] transition-colors group">
           <input ref={fileRef} type="file" accept="image/*,application/pdf" multiple className="hidden" onChange={onUpload} />
           <div className="w-14 h-14 rounded-full bg-white/5 flex items-center justify-center mb-4 group-hover:bg-indigo-500/10 transition-colors">
-            <Upload size={22} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
+            <Upload size={18} className="text-slate-500 group-hover:text-indigo-400 transition-colors" />
           </div>
           <p className="text-slate-400 font-bold text-sm text-center">{t('dropHere')}</p>
           <p className="text-slate-600 text-[10px] mt-2">{t('supportedFormats')}</p>
@@ -62,8 +62,8 @@ const ScannerPreview = ({ store }) => {
       ) : (
         <>
           {panel === 'crop' ? (
-            <div ref={cropContRef} className="relative inline-block" style={{ touchAction: 'none' }}>
-              <img ref={cropImgRef} src={currentSrc} alt="crop" className="max-w-full max-h-[35vh] md:max-h-[80vh] block pointer-events-none" draggable={false} />
+            <div ref={cropContRef} className="relative w-full h-full flex items-center justify-center" style={{ touchAction: 'none' }}>
+              <img ref={cropImgRef} src={currentSrc} alt="crop" className="w-full h-full max-h-full object-contain block pointer-events-none" draggable={false} />
               {[
                 { style: { top: 0, left: 0, right: 0, height: `${cropBox.y}%` } },
                 { style: { bottom: 0, left: 0, right: 0, height: `${100 - cropBox.y - cropBox.h}%` } },
@@ -85,10 +85,10 @@ const ScannerPreview = ({ store }) => {
               </div>
             </div>
           ) : showBA ? (
-            <div ref={baContRef} className="relative inline-block max-w-full select-none cursor-ew-resize"
+            <div ref={baContRef} className="relative w-full h-full select-none cursor-ew-resize flex items-center justify-center"
               style={{ touchAction: 'none' }}
               onPointerDown={e => { e.preventDefault(); e.stopPropagation(); setIsDraggingBA(true) }}>
-              <canvas ref={canvasRef} className="block max-w-full max-h-[35vh] md:max-h-[80vh] rounded-xl shadow-2xl" style={{}} />
+              <canvas ref={canvasRef} className="block w-full h-full rounded-xl shadow-2xl object-contain" style={{}} />
               <div className="absolute inset-0 overflow-hidden rounded-xl pointer-events-none" style={{ clipPath: `inset(0 ${100 - baSplit}% 0 0)` }}>
                 <canvas ref={origCanvasRef} style={{ width: '100%', height: '100%', display: 'block' }} />
                 <div className="absolute top-2 left-2 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-md">{lang === 'ar' ? 'قبل' : 'Before'}</div>
@@ -100,8 +100,8 @@ const ScannerPreview = ({ store }) => {
               <div className="absolute top-2 right-2 bg-black/70 text-white text-[10px] font-bold px-2 py-1 rounded-md pointer-events-none">{lang === 'ar' ? 'بعد' : 'After'}</div>
             </div>
           ) : (
-            <div className="relative">
-              <canvas ref={canvasRef} className="max-w-full max-h-[35vh] md:max-h-[80vh] object-contain block rounded-xl shadow-2xl" style={{}} />
+            <div className="relative w-full h-full flex items-center justify-center">
+              <canvas ref={canvasRef} className="w-full h-full object-contain block rounded-xl shadow-2xl" style={{}} />
               {wmText && (
                 <div className="absolute inset-0 flex items-center justify-center pointer-events-none overflow-hidden rounded-xl" style={{ opacity: wmOpacity / 100 }}>
                   <div className="text-black font-black text-2xl md:text-5xl -rotate-45 opacity-60 whitespace-nowrap">{wmText}</div>

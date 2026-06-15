@@ -333,21 +333,29 @@ export default function CoverDesigner() {
     amber: 'text-amber-400',
   }
 
-  const AccordionSection = ({ id, label, icon: Icon, color, children }) => {
+  const sectionCards = [
+    { id: 'add', label: lang === 'ar' ? 'عناصر' : 'Elements', icon: Type },
+    { id: 'styles', label: lang === 'ar' ? 'خطوط' : 'Fonts', icon: LayoutTemplate },
+    { id: 'colors', label: lang === 'ar' ? 'ألوان' : 'Colors', icon: Palette },
+    { id: 'stickers', label: lang === 'ar' ? 'ملصقات' : 'Stickers', icon: Sparkles },
+  ]
+
+  const AccordionSection = ({ id, label, icon: Icon, color, children, hideHeader = false }) => {
     const active = activeSection === id
     return (
       <div className="border-b border-white/5">
-        <button
-          onClick={() => setActiveSection(active ? '' : id)}
-          className={`w-full flex items-center justify-between p-4 font-bold transition-colors text-sm
-          ${active ? `${COLOR_TEXT[color]} bg-white/[0.01]` : 'text-slate-400 hover:text-white hover:bg-white/[0.01]'}`}
-        >
-          <span className="flex items-center gap-2.5">
-            <Icon size={16} />
-            <span>{label}</span>
-          </span>
-          <ChevronDown size={14} className={`transition-transform duration-200 ${active ? 'rotate-180' : ''}`} />
-        </button>
+        {!hideHeader && (
+          <button
+            onClick={() => setActiveSection(active ? '' : id)}
+            className={`w-full flex items-center justify-between p-4 font-bold transition-colors text-sm ${active ? `${COLOR_TEXT[color]} bg-white/[0.01]` : 'text-slate-400 hover:text-white hover:bg-white/[0.01]'}`}
+          >
+            <span className="flex items-center gap-2.5">
+              <Icon size={16} />
+              <span>{label}</span>
+            </span>
+            <ChevronDown size={14} className={`transition-transform duration-200 ${active ? 'rotate-180' : ''}`} />
+          </button>
+        )}
         {active && (
           <div className="p-4 bg-[#0a0a0d]/40 space-y-4 border-t border-white/5 fu">
             {children}
@@ -363,7 +371,7 @@ export default function CoverDesigner() {
       onTouchMove={onDragMove} onTouchEnd={onDragEnd}>
 
       {/* Preview Container */}
-      <div className="h-[38vh] md:h-full flex-shrink-0 md:flex-1 bg-black flex items-center justify-center p-3 md:p-6 touch-none relative border-b md:border-b-0 border-white/5">
+      <div className="h-[60vh] md:h-full flex-shrink-0 md:flex-1 bg-black flex items-center justify-center p-3 md:p-6 touch-none relative border-b md:border-b-0 border-white/5">
         <div className="h-full aspect-[1/1.414] relative">
           <div id="cover-print" ref={coverRef} className="w-full h-full overflow-hidden relative shadow-2xl"
             style={{ backgroundColor: design.bgColor, color: design.textColor, fontFamily: `"${design.fontFamily}",sans-serif` }}
@@ -479,6 +487,23 @@ export default function CoverDesigner() {
         <input type="file" accept="image/*" ref={imgInputRef} onChange={addImage} className="hidden" />
         
         <div className="flex-1 sc overflow-y-auto">
+          <div className="sticky top-0 z-20 bg-[#131317] border-b border-white/5 px-3 py-3 backdrop-blur-xl">
+            <div className="flex items-center gap-2 overflow-x-auto pb-1">
+              {sectionCards.map(({ id, label, icon: Icon }) => {
+                const active = activeSection === id
+                return (
+                  <button key={id}
+                    type="button"
+                    onClick={() => setActiveSection(active ? '' : id)}
+                    className={`flex-shrink-0 min-w-[84px] h-12 rounded-2xl border px-3 text-[11px] font-semibold transition-all duration-200 flex items-center justify-center gap-2 ${active ? 'bg-white/10 border-white/20 text-white shadow-[0_10px_30px_-18px_rgba(255,255,255,0.8)]' : 'bg-white/5 border-white/10 text-slate-300 hover:bg-white/10 hover:text-white'}`}
+                  >
+                    <Icon size={18} />
+                    <span>{label}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
           {selected ? (
             /* Contextual Edit Panel for Selected Element */
             <div className="flex flex-col fu">
@@ -595,6 +620,7 @@ export default function CoverDesigner() {
                 label={lang === 'ar' ? 'إضافة عناصر وتصاميم' : 'Add Elements & AI'}
                 icon={Type}
                 color="indigo"
+                hideHeader
               >
                 <div className="grid grid-cols-3 gap-2">
                   <button onClick={addText} className="flex items-center justify-center gap-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl text-xs font-bold text-slate-300"><Type size={13} />{lang === 'ar' ? 'نص' : 'Text'}</button>
@@ -631,6 +657,7 @@ export default function CoverDesigner() {
                 label={lang === 'ar' ? 'الخطوط والإطارات الخارجية' : 'Fonts & Borders'}
                 icon={LayoutTemplate}
                 color="emerald"
+                hideHeader
               >
                 <div className="space-y-4">
                   <div>
@@ -680,6 +707,7 @@ export default function CoverDesigner() {
                 label={lang === 'ar' ? 'الألوان وخلفيات التصميم' : 'Colors & Backdrops'}
                 icon={Palette}
                 color="rose"
+                hideHeader
               >
                 <div className="space-y-3">
                   {[{ k: 'bgColor', label: lang === 'ar' ? 'لون الخلفية' : 'Background Color' }, { k: 'borderColor', label: lang === 'ar' ? 'لون الأشكال' : 'Shape Color' }, { k: 'textColor', label: lang === 'ar' ? 'لون النصوص' : 'Text Color' }].map(({ k, label }) => (
@@ -721,6 +749,7 @@ export default function CoverDesigner() {
                 label={lang === 'ar' ? 'ملصقات جاهزة سريعة' : 'Ready Stickers Grid'}
                 icon={Sparkles}
                 color="amber"
+                hideHeader
               >
                 <p className="text-[10px] text-slate-500 font-bold mb-3">{lang === 'ar' ? 'اضغط لإضافة أي ملصق سريع لغلافك' : 'Tap to place sticker on the cover'}</p>
                 <div className="grid grid-cols-5 gap-2">

@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { computeCropBox, applySobelEdgeDetection, findEdgeBounds } from '../utils/cropMath'
 import { cropImageToBlob } from '../utils/canvasUtils'
 import { detectDocumentCornersFromDataUrl } from '../services/opencv/documentDetection'
+import { correctPerspective } from '../services/opencv/perspectiveCorrection'
 
 export function useCrop({
   currentSrc,
@@ -102,32 +103,78 @@ export function useCrop({
       if (!result || !result.corners || result.corners.length !== 4) {
         throw new Error('No document detected')
       }
+      const { corners, imageWidth, imageHeight, confidence, contourArea } = result
 
-      const { corners, imageWidth, imageHeight } = result
-      const [tl, tr, br, bl] = corners
+      const imageArea = imageWidth * imageHeight
+      const minArea = imageArea * 0.01
+      const maxArea = imageArea * 0.95
 
-      const minX = Math.min(tl.x, tr.x, br.x, bl.x)
-      const maxX = Math.max(tl.x, tr.x, br.x, bl.x)
-      const minY = Math.min(tl.y, tr.y, br.y, bl.y)
-      const maxY = Math.max(tl.y, tr.y, br.y, bl.y)
+      const valid = Array.isArray(corners) && corners.length === 4 && (confidence || 0) >= 0.6 && contourArea >= minArea && contourArea <= maxArea
 
-      const padX = Math.round(imageWidth * 0.015)
-      const padY = Math.round(imageHeight * 0.015)
-      const x1 = Math.max(0, minX - padX)
-      const y1 = Math.max(0, minY - padY)
-      const x2 = Math.min(imageWidth, maxX + padX)
-      const y2 = Math.min(imageHeight, maxY + padY)
+      if (!valid) {
+        // fallback to original crop box computation using detected corners
+        const [tl, tr, br, bl] = corners
 
-      setCropBox({
-        x: Math.max(0, Math.min(80, Math.round((x1 / imageWidth) * 100))),
-        y: Math.max(0, Math.min(80, Math.round((y1 / imageHeight) * 100))),
-        w: Math.min(100 - Math.round((x1 / imageWidth) * 100), Math.max(20, Math.round(((x2 - x1) / imageWidth) * 100))),
-        h: Math.min(100 - Math.round((y1 / imageHeight) * 100), Math.max(20, Math.round(((y2 - y1) / imageHeight) * 100))),
-      })
-      showToast(lang === 'ar' ? 'تم تحديد حواف المستند! ✓' : 'Document edges detected! ✓')
-      setPanel('crop')
-      setCropMode(true)
-      setShowBA(false)
+        const minX = Math.min(tl.x, tr.x, br.x, bl.x)
+        const maxX = Math.max(tl.x, tr.x, br.x, bl.x)
+        const minY = Math.min(tl.y, tr.y, br.y, bl.y)
+        const maxY = Math.max(tl.y, tr.y, br.y, bl.y)
+
+        const padX = Math.round(imageWidth * 0.015)
+        const padY = Math.round(imageHeight * 0.015)
+        const x1 = Math.max(0, minX - padX)
+        const y1 = Math.max(0, minY - padY)
+        const x2 = Math.min(imageWidth, maxX + padX)
+        const y2 = Math.min(imageHeight, maxY + padY)
+
+        setCropBox({
+          x: Math.max(0, Math.min(80, Math.round((x1 / imageWidth) * 100))),
+          y: Math.max(0, Math.min(80, Math.round((y1 / imageHeight) * 100))),
+          w: Math.min(100 - Math.round((x1 / imageWidth) * 100), Math.max(20, Math.round(((x2 - x1) / imageWidth) * 100))),
+          h: Math.min(100 - Math.round((y1 / imageHeight) * 100), Math.max(20, Math.round(((y2 - y1) / imageHeight) * 100))),
+        })
+        showToast(lang === 'ar' ? 'تم تحديد حواف المستند! ✓' : 'Document edges detected! ✓')
+        setPanel('crop')
+        setCropMode(true)
+        setShowBA(false)
+        setIsBusy(false)
+        return
+      }
+
+      // perform perspective correction and replace the current page image with corrected one
+      try {
+        const pc = await correctPerspective(currentSrc, corners)
+        if (pc && pc.correctedImage) {
+          const blob = await (await fetch(pc.correctedImage)).blob()
+          const newSrc = URL.createObjectURL(blob)
+          const oldSrc = pages[activePage]?.src
+          if (oldSrc && oldSrc.startsWith('blob:')) URL.revokeObjectURL(oldSrc)
+          setPages(pp => pp.map((p, i) => i === activePage ? { ...p, src: newSrc } : p))
+
+          const padX = Math.round(pc.width * 0.015)
+          const padY = Math.round(pc.height * 0.015)
+          const x1 = Math.max(0, padX)
+          const y1 = Math.max(0, padY)
+          const x2 = Math.min(pc.width, pc.width - padX)
+          const y2 = Math.min(pc.height, pc.height - padY)
+
+          setCropBox({
+            x: Math.max(0, Math.min(80, Math.round((x1 / pc.width) * 100))),
+            y: Math.max(0, Math.min(80, Math.round((y1 / pc.height) * 100))),
+            w: Math.min(100 - Math.round((x1 / pc.width) * 100), Math.max(20, Math.round(((x2 - x1) / pc.width) * 100))),
+            h: Math.min(100 - Math.round((y1 / pc.height) * 100), Math.max(20, Math.round(((y2 - y1) / pc.height) * 100))),
+          })
+
+          showToast(lang === 'ar' ? 'تم تصحيح منظور المستند! ✓' : 'Perspective corrected! ✓')
+          setPanel('crop')
+          setCropMode(true)
+          setShowBA(false)
+          setIsBusy(false)
+          return
+        }
+      } catch (e) {
+        console.warn('Perspective correction failed, proceeding without it', e)
+      }
     } catch (err) {
       console.warn('OpenCV detection failed, falling back to Sobel:', err)
       const img = new Image()

@@ -81,7 +81,7 @@ export default function Login() {
       <div className="w-full max-w-md bg-[#0d0d10]/60 backdrop-blur-xl border border-white/5 rounded-3xl p-6 md:p-8 shadow-2xl flex flex-col gap-6 relative z-10">
         <div className="flex flex-col items-center gap-3 text-center">
           <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg">
-            <Printer size={28} className="text-white" />
+            <Printer size={24} className="text-white" />
           </div>
           <div>
             <h1 className="text-2xl font-black text-white">{t('appTitle')}</h1>
@@ -98,7 +98,7 @@ export default function Login() {
             className={`flex-grow py-3 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2
               ${activeTab === 'signin' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
           >
-            <LogIn size={15} />
+            <LogIn size={13} />
             <span>{t('signIn')}</span>
           </button>
           <button
@@ -106,14 +106,14 @@ export default function Login() {
             className={`flex-grow py-3 text-sm font-bold rounded-xl transition-all flex items-center justify-center gap-2
               ${activeTab === 'signup' ? 'bg-indigo-600 text-white shadow-lg' : 'text-slate-500 hover:text-white'}`}
           >
-            <UserPlus size={15} />
+            <UserPlus size={13} />
             <span>{t('signUp')}</span>
           </button>
         </div>
 
         {error && (
           <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-2xl text-xs font-bold flex items-center gap-2">
-            <AlertCircle size={15} className="flex-shrink-0" />
+            <AlertCircle size={13} className="flex-shrink-0" />
             <span>{error}</span>
           </div>
         )}
@@ -165,7 +165,7 @@ export default function Login() {
           disabled={loading}
           className="w-full bg-white/5 hover:bg-white/10 border border-white/10 text-white font-bold py-3.5 rounded-2xl flex items-center justify-center gap-2.5 active:scale-95 transition-all text-sm"
         >
-          <Chrome size={18} className="text-red-400" />
+          <Chrome size={16} className="text-red-400" />
           <span>{t('signInWithGoogle')}</span>
         </button>
 

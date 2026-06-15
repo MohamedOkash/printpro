@@ -1,11 +1,25 @@
-importScripts('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js')
-
 const jobQueue = []
 let isProcessing = false
 let workerInstance = null
 
+async function loadTesseractScript() {
+  if (self.Tesseract) return
+  const response = await fetch('https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/4.1.1/tesseract.min.js')
+  if (!response.ok) {
+    throw new Error('Failed to load Tesseract.js script')
+  }
+  const script = await response.text()
+  const fn = new Function(script)
+  fn()
+  if (!self.Tesseract) {
+    throw new Error('Tesseract failed to initialize')
+  }
+}
+
+
 async function initializeWorker() {
   if (workerInstance) return
+  await loadTesseractScript()
   workerInstance = await self.Tesseract.createWorker({
     workerBlobURL: false,
   })

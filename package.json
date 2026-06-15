@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "firebase": "^12.14.0",
+    "framer-motion": "^11.0.0",
     "lucide-react": "^0.383.0",
     "opencv.js": "^1.2.1",
     "react": "^18.2.0",
